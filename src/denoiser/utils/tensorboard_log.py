@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import Self, TYPE_CHECKING
 
+import numpy as np
+import numpy.typing as npt
 import torch
 from torch.utils.data import DataLoader
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import TracebackType
 
     from torch.utils.tensorboard import SummaryWriter
@@ -29,28 +31,33 @@ class TensorBoard:
         dataloader: DataLoader,
         device: torch.device,
         crop_size: int | tuple[int, int],
-        denormalize_img_fn: Callable,
+        destandardize_img_fn: Callable[[npt.NDArray[np.float32] | torch.Tensor], npt.NDArray[np.uint8]],
         max_outputs: int = 4,
-        enabled: bool = True,
     ) -> None:
         """Initialize TensorBoard logger.
 
         Args:
             log_dir: Directory to save TensorBoard logs
-            enabled: Whether to enable TensorBoard logging
+            dataloader: DataLoader for getting sample images
+            device: Device to run computations on
+            crop_size: Size of image crops
+            destandardize_img_fn: Function to convert normalized images back to uint8
+            max_outputs: Maximum number of images to log
         """
-        self.enabled = enabled
+        self.dataloader = dataloader
+        self.device = device
+        self.crop_size = crop_size if isinstance(crop_size, tuple) else (crop_size, crop_size)
+        self.destandardize_img_fn = destandardize_img_fn
+        self.max_outputs = max_outputs
         self.writer: SummaryWriter | None = None
 
-        if self.enabled:
-            if _SummaryWriter is None:
-                print("Warning: TensorBoard not available. Install with 'pip install tensorboard'")
-                self.enabled = False
-                self.writer = None
-            else:
-                self.log_dir = Path(log_dir)
-                self.log_dir.mkdir(parents=True, exist_ok=True)
-                self.writer = _SummaryWriter(log_dir=str(self.log_dir))
+        if _SummaryWriter is None:
+            print("Warning: TensorBoard not available. Install with 'pip install tensorboard'")
+            self.writer = None
+        else:
+            self.log_dir = Path(log_dir)
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            self.writer = _SummaryWriter(log_dir=str(self.log_dir))
 
     def log_scalar(self, tag: str, value: float, step: int) -> None:
         """Log a scalar value.
@@ -97,17 +104,88 @@ class TensorBoard:
         if self.writer is not None:
             self.writer.add_image(tag, img_tensor, step, dataformats=dataformats)
 
-    def log_images(self, tag: str, img_tensor: torch.Tensor, step: int, dataformats: str = "NCHW") -> None:
-        """Log multiple images.
+    @staticmethod
+    def _process_tensor_for_display(tensor_batch: torch.Tensor) -> torch.Tensor:
+        """Process tensor batch for TensorBoard display.
+
+        Clamps values to [0, 1] range for proper visualization without destandardization.
 
         Args:
-            tag: Name of the images
-            img_tensor: Batch of images (N, C, H, W) format by default
-            step: Global step value
-            dataformats: Format of the image tensor ('NCHW', 'NHWC', etc.)
+            tensor_batch: Batch of tensors (N, C, H, W)
+
+        Returns:
+            Processed tensor batch normalized to [0, 1] for TensorBoard
         """
-        if self.writer is not None:
-            self.writer.add_images(tag, img_tensor, step, dataformats=dataformats)
+        # Simply clamp the values to [0, 1] range for visualization
+        # This avoids the complex destandardization process that's causing issues
+        processed_batch = torch.clamp(tensor_batch, 0, 1)
+        return processed_batch
+
+    @staticmethod
+    def _concatenate_images_horizontally(tensor_batch: torch.Tensor) -> torch.Tensor:
+        """Concatenate batch images horizontally into a single image.
+
+        Args:
+            tensor_batch: Batch of images (N, C, H, W)
+
+        Returns:
+            Single image with all batch images concatenated horizontally (C, H, W*N)
+        """
+        if tensor_batch.size(0) == 1:
+            return tensor_batch.squeeze(0)  # Remove batch dimension for single image
+
+        # Concatenate along width dimension (dim=3 -> dim=2 after removing batch dim)
+        concatenated = torch.cat([tensor_batch[i] for i in range(tensor_batch.size(0))], dim=2)
+        return concatenated
+
+    def log_images(self, model: torch.nn.Module, step: int, tag_prefix: str = "Images") -> None:
+        """Log sample images using dataloader, model predictions, and destandardization.
+
+        Images are arranged vertically in the order: Noisy, Clean, Predictions.
+        Each row contains horizontally concatenated batch images.
+
+        Args:
+            model: The denoising model to generate predictions
+            step: Global step value
+            tag_prefix: Prefix for the image tags in TensorBoard
+        """
+        if self.writer is None:
+            return
+
+        model.eval()
+        with torch.no_grad():
+            try:
+                # Get a batch of data from the dataloader
+                batch = next(iter(self.dataloader))
+                clean_images, noisy_images = batch
+
+                # Move to device and limit to max_outputs
+                clean_images = clean_images[: self.max_outputs].to(self.device)
+                noisy_images = noisy_images[: self.max_outputs].to(self.device)
+
+                # Generate predictions
+                predictions = model(noisy_images)
+
+                # Process tensors for display (clamp to [0, 1])
+                clean_batch = TensorBoard._process_tensor_for_display(clean_images.cpu())
+                noisy_batch = TensorBoard._process_tensor_for_display(noisy_images.cpu())
+                pred_batch = TensorBoard._process_tensor_for_display(predictions.cpu())
+
+                # Concatenate images horizontally for each type
+                noisy_row = self._concatenate_images_horizontally(noisy_batch)
+                clean_row = self._concatenate_images_horizontally(clean_batch)
+                pred_row = self._concatenate_images_horizontally(pred_batch)
+
+                # Concatenate vertically: Noisy -> Clean -> Predictions
+                combined_image = torch.cat([noisy_row, clean_row, pred_row], dim=1)  # dim=1 is height
+
+                # Log the combined image to TensorBoard
+                self.writer.add_image(f"{tag_prefix}/Comparison", combined_image, step, dataformats="CHW")
+
+            except (StopIteration, RuntimeError, ValueError) as e:
+                print(f"Warning: Failed to log images to TensorBoard: {e}")
+
+        model.train()
 
     def log_model_graph(self, model: torch.nn.Module, input_tensor: torch.Tensor) -> None:
         """Log model computational graph.

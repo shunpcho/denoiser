@@ -13,6 +13,7 @@ from torch import optim
 from denoiser.data.data_loader import PairdDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
+    destandardize_img,
     load_img_clean,
     paring_clean_noisy,
     random_crop,
@@ -22,6 +23,7 @@ from denoiser.models.unet import UNet
 from denoiser.utils.get_logger import create_logger
 from denoiser.utils.tensorboard_log import TensorBoard
 from denoiser.utils.trainer import TrainTrainer
+from denoiser.utils.vis_img import save_validation_predictions
 
 if TYPE_CHECKING:
     from denoiser.configs.config import TrainConfig
@@ -95,6 +97,7 @@ def train(
     # Create standardization function (normalize to [0, 1] range)
     # For RGB images: convert uint8 [0, 255] to float32 [0, 1]
     standardization_fn = standardize_img(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0))
+    destandardize_img_fn = destandardize_img(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0))
 
     dataset = PairdDataset(
         train_data_path,
@@ -127,6 +130,7 @@ def train(
         num_workers=4,
         pin_memory=True,
     )
+
     logger.info("Data loaders created.")
 
     # Build models...
@@ -154,11 +158,19 @@ def train(
         val_loader,
     )
 
-    tb_logger = TensorBoard(log_dir=output_dir / "tensorboard", enabled=train_config.tensorboard)
+    tblog_dir = output_dir / "tensorboard"
+    tb_logger = TensorBoard(
+        log_dir=tblog_dir,
+        dataloader=val_loader,
+        device=device,
+        crop_size=train_config.cropsize,
+        destandardize_img_fn=destandardize_img_fn,
+        max_outputs=4,
+    )
     if train_config.tensorboard:
-        logger.info(f"TensorBoard logging enabled: {output_dir / 'tensorboard'}")
+        logger.info(f"TensorBoard logging enabled: {tblog_dir}")
 
-    if tb_logger.enabled:
+    if train_config.tensorboard:
         sample_input = torch.randn(1, 3, train_config.cropsize, train_config.cropsize).to(device)
         tb_logger.log_model_graph(models, sample_input)
         logger.info("Model graph logged to TensorBoard.")
@@ -191,13 +203,20 @@ def train(
                 train_loss=train_loss_value, val_loss=val_loss, learning_rate=scheduler.get_last_lr()[0], step=iteration
             )
 
-            tb_logger.log_sample_predictions(
-                clean_images=clean_samples,
-                noisy_images=noisy_samples,
-                predictions=pred_samples,
-                step=iteration,
-                max_samples=n_samples,
+            tb_logger.log_images(models, step=iteration, tag_prefix="Sample")
+
+            # Save validation prediction images
+            pred_images_dir = output_dir / "validation_predictions"
+            save_validation_predictions(
+                model=models,
+                val_loader=val_loader,
+                device=device,
+                destandardize_fn=destandardize_img_fn,
+                save_dir=pred_images_dir,
+                iteration=iteration,
+                max_samples=4,
             )
+            logger.info(f"Validation prediction images saved to {pred_images_dir}")
 
             models.train()
             scheduler.step()
@@ -206,5 +225,5 @@ def train(
     logger.info(f"Training completed in {(total_time - train_start_time) / 60:.2f} minutes.")
 
     tb_logger.close()
-    if tb_logger.enabled:
+    if train_config.tensorboard:
         logger.info("TensorBoard logger closed.")

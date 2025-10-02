@@ -22,7 +22,7 @@ def main() -> None:
         cropsize=128,  # Smaller size for faster training during development
         noise_sigma=0.1,
         learning_rate=1e-4,
-        iteration=10,  # Reduced for testing
+        iteration=50,  # Reduced for testing
         interval=5,  # More frequent validation
         output_dir="./results",
         log_dir="logs",

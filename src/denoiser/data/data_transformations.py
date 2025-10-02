@@ -9,7 +9,7 @@ import torch
 from PIL import Image
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from denoiser.configs.config import PairingKeyWords
 
@@ -25,13 +25,17 @@ RGB_CHANNELS = 3
 def load_img(path: Path) -> npt.NDArray[np.uint8]:
     """Load image as RGB and convert numpy."""
     img = Image.open(path).convert("RGB")
-    return np.array(img, dtype=np.uint8)
+    # Ensure proper conversion to avoid dtype issues
+    img_array = np.asarray(img)
+    return img_array.astype(np.uint8)
 
 
 def load_img_gray(path: Path) -> npt.NDArray[np.uint8]:
     """Load image as grayscale and convert numpy."""
     img = Image.open(path).convert("L")
-    return np.array(img, dtype=np.uint8)
+    # Ensure proper conversion to avoid dtype issues
+    img_array = np.asarray(img)
+    return img_array.astype(np.uint8)
 
 
 def load_img_clean(paring_words: PairingKeyWords | None) -> Callable[[Path], npt.NDArray[np.uint8]]:
@@ -42,7 +46,8 @@ def load_img_clean(paring_words: PairingKeyWords | None) -> Callable[[Path], npt
         def load_clean_rgb(path: Path) -> npt.NDArray[np.uint8]:
             """Load image as RGB and convert to numpy array."""
             img = Image.open(path).convert("RGB")
-            return np.array(img, dtype=np.uint8)
+            img_array = np.asarray(img)
+            return img_array.astype(np.uint8)
 
         return load_clean_rgb
 
@@ -78,7 +83,8 @@ def load_img_clean(paring_words: PairingKeyWords | None) -> Callable[[Path], npt
     def load_clean_rgb_fallback(path: Path) -> npt.NDArray[np.uint8]:
         """Fallback: Load image as RGB and convert to numpy array."""
         img = Image.open(path).convert("RGB")
-        return np.array(img, dtype=np.uint8)
+        img_array = np.asarray(img)
+        return img_array.astype(np.uint8)
 
     return load_clean_rgb_fallback
 
@@ -102,10 +108,10 @@ def paring_clean_noisy(
         def add_gaussian_noise(path: Path) -> npt.NDArray[np.uint8]:
             """Add Gaussian noise to clean image."""
             img = Image.open(path).convert("RGB")
-            img = np.array(img, dtype=np.uint8)
+            img_array = np.asarray(img).astype(np.uint8)
             rng = np.random.default_rng()
-            noise = rng.normal(0, noise_sigma, img.shape).astype(np.int16)
-            noisy_img = img.astype(np.int16) + noise
+            noise = rng.normal(0, noise_sigma, img_array.shape).astype(np.int16)
+            noisy_img = img_array.astype(np.int16) + noise
             return np.clip(noisy_img, MIN_PIXEL_VALUE, MAX_PIXEL_VALUE).astype(np.uint8)
 
         return add_gaussian_noise
@@ -117,7 +123,8 @@ def paring_clean_noisy(
             """Load corresponding noisy image as RGB."""
             noisy_path = Path(str(path).replace(paring_words.clean, paring_words.noisy))  # type: ignore[union-attr]
             img = Image.open(noisy_path).convert("RGB")
-            return np.array(img, dtype=np.uint8)
+            img_array = np.asarray(img)
+            return img_array.astype(np.uint8)
 
         return load_noisy_rgb
 
@@ -157,7 +164,8 @@ def paring_clean_noisy(
         """Fallback: Load noisy RGB image."""
         noisy_path = Path(str(path).replace(paring_words.clean, paring_words.noisy))  # type: ignore[union-attr]
         img = Image.open(noisy_path).convert("RGB")
-        return np.array(img, dtype=np.uint8)
+        img_array = np.asarray(img)
+        return img_array.astype(np.uint8)
 
     return load_noisy_rgb_fallback
 
@@ -218,8 +226,9 @@ def destandardize_img(
 
     def destandardize(img: npt.NDArray[np.float32] | torch.Tensor) -> npt.NDArray[np.uint8]:
         if isinstance(img, torch.Tensor):
-            # (N, C, H, W) -> (N, H, W, C)
-            img = np.transpose(0, 2, 3, 1)
+            # (C, H, W) -> (H, W, C) for single image, or (N, C, H, W) -> (N, H, W, C) for batch
+            batch_dims = 4
+            img = img.permute(0, 2, 3, 1) if img.dim() == batch_dims else img.permute(1, 2, 0)
             img = img.cpu().detach().numpy()
         img = (img * std + mean) * max_val
         img = np.clip(img, a_min=0, a_max=255).astype(np.uint8)
@@ -270,7 +279,7 @@ def random_crop(crop_size: int | tuple[int, int]) -> Callable[[npt.NDArray[np.ui
     else:
         crop_h, crop_w = crop_size
 
-    def crop(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    def rnd_crop(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
         h, w = img.shape[:2]
 
         # If image is smaller than crop size, return original image
@@ -288,4 +297,34 @@ def random_crop(crop_size: int | tuple[int, int]) -> Callable[[npt.NDArray[np.ui
         else:  # Grayscale
             return img[top : top + crop_h, left : left + crop_w]
 
-    return crop
+    return rnd_crop
+
+
+def specific_crop(
+    crop_size: int | tuple[int, int],
+) -> Callable[[npt.NDArray[np.uint8]], Generator[npt.NDArray[np.uint8], None, None]]:
+    """Create function to perform specific crop on image.
+
+    Args:
+        crop_size: Size of the crop. If int, creates square crop. If tuple, (height, width).
+
+    Returns:
+        Function to perform specific crop on image.
+    """
+    if isinstance(crop_size, int):
+        crop_h = crop_w = crop_size
+    else:
+        crop_h, crop_w = crop_size
+
+    def spec_crop(img: npt.NDArray[np.uint8]) -> Generator[npt.NDArray[np.uint8], None, None]:
+        h, w = img.shape[:2]
+
+        for crop_y in range(0, h, crop_h):
+            for crop_x in range(0, w, crop_w):
+                if len(img.shape) == RGB_CHANNELS:  # RGB or multi-channel
+                    img_crop = img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w, :]
+                else:  # Grayscale
+                    img_crop = img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
+                yield img_crop
+
+    return spec_crop
