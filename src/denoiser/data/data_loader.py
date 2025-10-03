@@ -75,8 +75,7 @@ class PairdDataset(Dataset):
         img_clean = self.data_loading_fn(clean_path)
         img_noisy = self.paring_fn(clean_path)
         if self.data_augmentation_fn is not None:
-            img_clean = self.data_augmentation_fn(img_clean)
-            img_noisy = self.data_augmentation_fn(img_noisy)  # it is different seed?
+            img_clean, img_noisy = self.data_augmentation_fn(img_clean, img_noisy)
 
         img_clean = self.img_standardization_fn(img_clean)
         img_noisy = self.img_standardization_fn(img_noisy)  # it is diffrent params?

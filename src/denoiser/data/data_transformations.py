@@ -171,14 +171,25 @@ def paring_clean_noisy(
 
 
 def compose_transformations(
-    transforms: list[Callable[[npt.NDArray[np.uint8 | np.float32]], npt.NDArray[np.uint8 | np.float32]]],
-) -> Callable[[npt.NDArray[np.uint8 | np.float32]], npt.NDArray[np.uint8 | np.float32]]:
+    transforms: list[
+        Callable[
+            [npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]],
+            tuple[npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]],
+        ]
+    ],
+) -> Callable[
+    [npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]],
+    tuple[npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]],
+]:
     """Compose multiple transformations into one."""
 
-    def _fn(img: npt.NDArray[np.uint8 | np.float32]) -> npt.NDArray[np.uint8 | np.float32]:
+    def _fn(
+        img_clean: npt.NDArray[np.uint8 | np.float32],
+        img_noisy: npt.NDArray[np.uint8 | np.float32],
+    ) -> tuple[npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]]:
         for transform in transforms:
-            img = transform(img)
-        return img
+            img_clean, img_noisy = transform(img_clean, img_noisy)
+        return img_clean, img_noisy
 
     return _fn
 
@@ -265,7 +276,9 @@ def destandardize_tensor(
 
 
 # Augmentation functions
-def random_crop(crop_size: int | tuple[int, int]) -> Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.uint8]]:
+def random_crop(
+    crop_size: int | tuple[int, int],
+) -> Callable[[npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]]:
     """Create function to perform random crop on image.
 
     Args:
@@ -279,12 +292,14 @@ def random_crop(crop_size: int | tuple[int, int]) -> Callable[[npt.NDArray[np.ui
     else:
         crop_h, crop_w = crop_size
 
-    def rnd_crop(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
-        h, w = img.shape[:2]
+    def rnd_crop(
+        img_clean: npt.NDArray[np.uint8], img_noisy: npt.NDArray[np.uint8]
+    ) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
+        h, w = img_clean.shape[:2]
 
         # If image is smaller than crop size, return original image
         if h < crop_h or w < crop_w:
-            return img
+            return img_clean, img_noisy
 
         # Generate random top-left corner
         rng = np.random.default_rng()
@@ -292,10 +307,14 @@ def random_crop(crop_size: int | tuple[int, int]) -> Callable[[npt.NDArray[np.ui
         left = rng.integers(0, w - crop_w + 1)
 
         # Perform crop
-        if len(img.shape) == RGB_CHANNELS:  # RGB or multi-channel
-            return img[top : top + crop_h, left : left + crop_w, :]
+        if len(img_clean.shape) == RGB_CHANNELS:  # RGB or multi-channel
+            return img_clean[top : top + crop_h, left : left + crop_w, :], img_noisy[
+                top : top + crop_h, left : left + crop_w, :
+            ]
         else:  # Grayscale
-            return img[top : top + crop_h, left : left + crop_w]
+            return img_clean[top : top + crop_h, left : left + crop_w], img_noisy[
+                top : top + crop_h, left : left + crop_w
+            ]
 
     return rnd_crop
 
