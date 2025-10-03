@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import random
 import time
 from pathlib import Path
-from typing import Literal, TYPE_CHECKING
+from typing import Literal
 
 import numpy as np
 import torch
 import torch.utils.data
 from torch import optim
 
+from denoiser.configs.config import PairingKeyWords, TrainConfig
 from denoiser.data.data_loader import PairdDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
@@ -24,9 +26,6 @@ from denoiser.utils.get_logger import create_logger
 from denoiser.utils.tensorboard_log import TensorBoard
 from denoiser.utils.trainer import TrainTrainer
 from denoiser.utils.vis_img import save_validation_predictions
-
-if TYPE_CHECKING:
-    from denoiser.configs.config import TrainConfig
 
 
 def train(
@@ -61,9 +60,21 @@ def train(
     log_dir = output_dir / train_config.log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
     logger = create_logger("denoiser", log_dir, verbose)
+
+    logger.info(f"Training data path: {train_data_path}")
+    if valid_data_path:
+        logger.info(f"Validation data path: {valid_data_path}")
+    logger.info(f"Training configuration: {train_config}")
+
     logger.info("Created output and log directories.")
 
     device = train_config.device
+
+    img_channels = (
+        3
+        if train_config.pairing_keywords is None or train_config.pairing_keywords.detector is None
+        else len(train_config.pairing_keywords.detector)
+    )
 
     # choufuku
     if pretrain_model_path := train_config.pretrain_model_path:
@@ -96,8 +107,10 @@ def train(
 
     # Create standardization function (normalize to [0, 1] range)
     # For RGB images: convert uint8 [0, 255] to float32 [0, 1]
-    standardization_fn = standardize_img(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0))
-    destandardize_img_fn = destandardize_img(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0))
+    mean = (0.0,) * img_channels
+    std = (1.0,) * img_channels
+    standardization_fn = standardize_img(mean, std)
+    destandardize_img_fn = destandardize_img(mean, std)
 
     dataset = PairdDataset(
         train_data_path,
@@ -134,7 +147,7 @@ def train(
     logger.info("Data loaders created.")
 
     # Build models...
-    models = UNet(in_ch=3, out_ch=3, base_ch=64).to(device)
+    models = UNet(in_ch=img_channels, out_ch=img_channels, base_ch=64).to(device)
 
     if not pretrain_model_path:
         logger.info("No pretrained model specified, initializing new model.")
@@ -227,3 +240,71 @@ def train(
     tb_logger.close()
     if train_config.tensorboard:
         logger.info("TensorBoard logger closed.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train a denoiser model.")
+    parser.add_argument("--train_data_path", type=Path, required=True, help="Path to the training data.")
+    parser.add_argument("--valid_data_path", type=Path, default=None, help="Path to the validation data (optional).")
+
+    parser.add_argument(
+        "--clean_img_keyword", type=str, default=None, help="Keyword to identify clean images in filename."
+    )
+    parser.add_argument(
+        "--noisy_img_keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
+    )
+    parser.add_argument(
+        "detector_keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
+    )
+    parser.add_argument("--output_dir", type=Path, default="./results", help="Directory to save results.")
+    parser.add_argument("--log_dir", type=Path, default="logs", help="Directory to save logs.")
+
+    parser.add_argument("--batch_size", type=int, default=4, help="Training batch size.")
+    parser.add_argument("--cropsize", type=int, default=None, help="Crop size for training images.")
+    parser.add_argument("--noise_sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
+    parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate for optimizer.")
+    parser.add_argument("--iteration", type=int, default=1000, help="Number of training iterations.")
+    parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
+    parser.add_argument("--pretrain_model_path", type=Path, default=None, help="Path to the pre-trained model.")
+    parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging.")
+    parser.add_argument(
+        "--verbose", type=str, choices=["debug", "info", "error"], default="info", help="Logging verbosity level."
+    )
+
+    args = parser.parse_args()
+    args = vars(args)
+
+    pairing_keywords = (
+        PairingKeyWords(
+            clean=args.pop("clean_img_keyword"),
+            noisy=args.pop("noisy_img_keyword"),
+            detector=args.pop("detector_keywords") or None,
+        )
+        if args.get("clean_img_keyword")
+        else None
+    )
+
+    """Run the training process with default configuration."""
+
+    # Create training configuration
+    config = TrainConfig.from_optional_kwargs(
+        batch_size=args.pop("batch_size"),
+        cropsize=args.pop("cropsize"),
+        noise_sigma=args.pop("noise_sigma"),
+        learning_rate=args.pop("learning_rate"),
+        iteration=args.pop("iteration"),
+        interval=args.pop("interval"),
+        pretrain_model_path=args.pop("pretrain_model_path"),
+        output_dir=args.pop("output_dir"),
+        log_dir=args.pop("log_dir"),
+        pairing_keywords=pairing_keywords,
+        tensorboard=args.pop("tensorboard"),
+    )
+
+    # Run training
+    try:
+        train(**args, train_config=config)
+        print("Training completed successfully!")
+    except Exception as e:
+        print(f"Training failed with error: {e}")
+        raise
