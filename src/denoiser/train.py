@@ -77,7 +77,6 @@ def train(
         else len(train_config.pairing_keywords.detector)
     )
 
-    # choufuku
     if pretrain_model_path := train_config.pretrain_model_path:
         pretrain_model_path = Path(pretrain_model_path)
         if not pretrain_model_path.is_file():

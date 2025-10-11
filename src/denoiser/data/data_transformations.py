@@ -41,53 +41,37 @@ def load_img_gray(path: Path) -> npt.NDArray[np.uint8]:
 
 def load_img_clean(paring_words: PairingKeyWords | None) -> Callable[[Path], npt.NDArray[np.uint8]]:
     """Return function to get clean image loading function based on pairing configuration."""
+    if paring_words is None:
+        # Multi-detector case
+        if len(paring_words.detector) >= MIN_DETECTOR_COUNT:
+
+            def load_dual_detector(path: Path) -> npt.NDArray[np.uint8]:
+                """Load two detector images and concatenate channel-wise."""
+                detect_a_path = path
+                detect_b_path = path.with_name(path.name.replace(paring_words.detector[0], paring_words.detector[1]))
+                img_detect_a = load_img_gray(detect_a_path)
+                img_detect_b = load_img_gray(detect_b_path)
+                # Expand dimensions: (H, W) -> (H, W, 1)
+                img_a = np.expand_dims(img_detect_a, axis=-1)
+                img_b = np.expand_dims(img_detect_b, axis=-1)
+                # Concatenate: (H, W, 2)
+                return np.concatenate([img_a, img_b], axis=-1)
+
+            return load_dual_detector
+
+        # Single detector case
+        elif len(paring_words.detector) == 1:
+
+            def load_single_detector(path: Path) -> npt.NDArray[np.uint8]:
+                """Load single detector image as grayscale with channel dimension."""
+                img_detect = load_img_gray(path)
+                # Add channel dimension: (H, W) -> (H, W, 1)
+                return np.expand_dims(img_detect, axis=-1)
+
+            return load_single_detector
+
     # Default case: simple RGB loading
-    if paring_words is None or paring_words.detector is None:
-
-        def load_clean_rgb(path: Path) -> npt.NDArray[np.uint8]:
-            """Load image as RGB and convert to numpy array."""
-            img = Image.open(path).convert("RGB")
-            img_array = np.asarray(img)
-            return img_array.astype(np.uint8)
-
-        return load_clean_rgb
-
-    # Multi-detector case
-    if len(paring_words.detector) >= MIN_DETECTOR_COUNT:
-
-        def load_dual_detector(path: Path) -> npt.NDArray[np.uint8]:
-            """Load two detector images and concatenate channel-wise."""
-            detect_a_path = path
-            detect_b_path = path.with_name(path.name.replace(paring_words.detector[0], paring_words.detector[1]))
-            img_detect_a = load_img_gray(detect_a_path)
-            img_detect_b = load_img_gray(detect_b_path)
-            # Expand dimensions: (H, W) -> (H, W, 1)
-            img_a = np.expand_dims(img_detect_a, axis=-1)
-            img_b = np.expand_dims(img_detect_b, axis=-1)
-            # Concatenate: (H, W, 2)
-            return np.concatenate([img_a, img_b], axis=-1)
-
-        return load_dual_detector
-
-    # Single detector case
-    elif len(paring_words.detector) == 1:
-
-        def load_single_detector(path: Path) -> npt.NDArray[np.uint8]:
-            """Load single detector image as grayscale with channel dimension."""
-            img_detect = load_img_gray(path)
-            # Add channel dimension: (H, W) -> (H, W, 1)
-            return np.expand_dims(img_detect, axis=-1)
-
-        return load_single_detector
-
-    # Fallback to RGB loading
-    def load_clean_rgb_fallback(path: Path) -> npt.NDArray[np.uint8]:
-        """Fallback: Load image as RGB and convert to numpy array."""
-        img = Image.open(path).convert("RGB")
-        img_array = np.asarray(img)
-        return img_array.astype(np.uint8)
-
-    return load_clean_rgb_fallback
+    return load_img
 
 
 # Pairing functions
