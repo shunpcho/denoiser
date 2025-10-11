@@ -12,7 +12,7 @@ import torch.utils.data
 from torch import optim
 
 from denoiser.configs.config import PairingKeyWords, TrainConfig
-from denoiser.data.data_loader import PairdDataset
+from denoiser.data.data_loader import PairdDataset, TrainSubset, ValSubset
 from denoiser.data.data_transformations import (
     compose_transformations,
     destandardize_img,
@@ -22,6 +22,7 @@ from denoiser.data.data_transformations import (
     standardize_img,
 )
 from denoiser.models.unet import UNet
+from denoiser.utils.data_utils import collate_fn
 from denoiser.utils.get_logger import create_logger
 from denoiser.utils.tensorboard_log import TensorBoard
 from denoiser.utils.trainer import TrainTrainer
@@ -90,7 +91,8 @@ def train(
 
     paring_words = train_config.pairing_keywords  # Optional[PairingKeyWards]
     noise_sigma = train_config.noise_sigma
-    crop_size = train_config.cropsize  # Default 256x256 crop
+    # Set default crop size if not specified
+    crop_size = train_config.cropsize if train_config.cropsize is not None else 256
 
     clean_img_loader = load_img_clean(paring_words)
     noisy_img_loader = paring_clean_noisy(paring_words, noise_sigma)
@@ -126,8 +128,11 @@ def train(
     logger.info(f"Dataset size: {dataset_size} samples")
     train_size = int(0.8 * dataset_size)
     valid_size = dataset_size - train_size
-    train_dataset, valid_dataset = torch.utils.data.random_split(dataset, [train_size, valid_size])
+    train_subset, valid_subset = torch.utils.data.random_split(dataset, [train_size, valid_size])
     logger.info(f"Train/Validation split: {train_size}/{valid_size} samples")
+
+    train_dataset = TrainSubset(dataset, train_subset.indices)
+    val_dataset = ValSubset(dataset, valid_subset.indices)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -135,13 +140,15 @@ def train(
         shuffle=True,
         num_workers=4,
         pin_memory=True,
+        collate_fn=collate_fn,
     )
     val_loader = torch.utils.data.DataLoader(
-        valid_dataset,
-        batch_size=train_config.batch_size,
+        val_dataset,
+        batch_size=1,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
+        collate_fn=collate_fn,
     )
 
     logger.info("Data loaders created.")
@@ -159,7 +166,10 @@ def train(
     optimizer = optim.Adam(models.parameters(), lr=train_config.learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
-    input_shape = next(iter(val_loader))[0].shape  # Assuming (batch_size, channels, height, width)
+    # Debug: Check data types and shapes
+    sample_batch = next(iter(val_loader))
+    clean_sample, _ = sample_batch
+    input_shape = clean_sample.shape
     logger.info("Start training ...")
     logger.info(f"Input shape: {input_shape}")
 

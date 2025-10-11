@@ -19,6 +19,7 @@ MIN_PIXEL_VALUE = 0
 MAX_PIXEL_VALUE = 255
 MIN_DETECTOR_COUNT = 2
 RGB_CHANNELS = 3
+IMAGE_DIMENSIONS_3D = 3  # (H, W, C)
 
 
 # data_loading_fn
@@ -213,6 +214,8 @@ def standardize_img(
     max_val = 255.0
 
     def standardize(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.float32]:
+        # Convert uint8 to float32 first to avoid type mismatch
+        img = img.astype(np.float32)
         return (img - mean * max_val) / (std * max_val)
 
     return standardize
@@ -266,9 +269,8 @@ def destandardize_tensor(
     def destandardize(img: torch.Tensor) -> torch.Tensor:
         mean_tensor = mean.to(img.device)
         std_tensor = std.to(img.device)
-        # (N, C, H, W) -> (N, H, W, C)
-        img = img.permute(0, 2, 3, 1)
-        img = (img * std_tensor + mean_tensor) * 255
+        # Destandardize: (img * std + mean) * 255
+        img = (img * std_tensor.view(1, -1, 1, 1) + mean_tensor.view(1, -1, 1, 1)) * 255
         img = torch.clamp(img, min=0, max=255).type(torch.uint8)
         return img
 
@@ -277,16 +279,27 @@ def destandardize_tensor(
 
 # Augmentation functions
 def random_crop(
-    crop_size: int | tuple[int, int],
+    crop_size: int | tuple[int, int] | None,
 ) -> Callable[[npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]]:
     """Create function to perform random crop on image.
 
     Args:
         crop_size: Size of the crop. If int, creates square crop. If tuple, (height, width).
+                  If None, returns original images without cropping.
 
     Returns:
         Function to perform random crop on image.
     """
+    # If no crop size specified, return identity function
+    if crop_size is None:
+
+        def no_crop(
+            img_clean: npt.NDArray[np.uint8], img_noisy: npt.NDArray[np.uint8]
+        ) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
+            return img_clean, img_noisy
+
+        return no_crop
+
     if isinstance(crop_size, int):
         crop_h = crop_w = crop_size
     else:
@@ -307,11 +320,11 @@ def random_crop(
         left = rng.integers(0, w - crop_w + 1)
 
         # Perform crop
-        if len(img_clean.shape) == RGB_CHANNELS:  # RGB or multi-channel
+        if len(img_clean.shape) == IMAGE_DIMENSIONS_3D:  # RGB or multi-channel (H, W, C)
             return img_clean[top : top + crop_h, left : left + crop_w, :], img_noisy[
                 top : top + crop_h, left : left + crop_w, :
             ]
-        else:  # Grayscale
+        else:  # Grayscale (H, W)
             return img_clean[top : top + crop_h, left : left + crop_w], img_noisy[
                 top : top + crop_h, left : left + crop_w
             ]
