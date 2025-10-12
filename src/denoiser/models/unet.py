@@ -1,63 +1,207 @@
+import timm
 import torch
 from torch import nn
 
+ENCODER_DEPTHS = {3, 4, 5}
+
 
 class ConvBlock(nn.Module):
+    """Double convolution block used in decoder."""
+
     def __init__(self, in_ch: int, out_ch: int) -> None:
         super().__init__()
-        self.net = nn.Sequential(
+        self.conv = nn.Sequential(
             nn.Conv2d(in_ch, out_ch, 3, padding=1),
+            nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_ch, out_ch, 3, padding=1),
+            nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return self.conv(x)
 
 
 class UNet(nn.Module):
-    def __init__(self, in_ch: int = 3, out_ch: int = 3, base_ch: int = 64) -> None:
+    """UNet with TIMM encoder backbone.
+
+    Args:
+        encoder_name: Name of the TIMM model (e.g., 'resnet34', 'efficientnet_b0')
+        encoder_depth: Number of encoder stages to use (3, 4, or 5)
+        in_channels: Number of input channels (default: 3)
+        decoder_channels: List of channel numbers for decoder blocks
+        pretrained: Whether to use pretrained weights for the encoder
+    """
+
+    def __init__(
+        self,
+        encoder_name: str = "resnet34",
+        in_channels: int = 3,
+        encoder_depth: int = 5,
+        out_channels: int | None = None,
+        decoder_channels: list[int] | None = None,
+        pretrained: bool = True,
+    ) -> None:
         super().__init__()
-        self.enc1 = ConvBlock(in_ch, base_ch)
-        self.enc2 = ConvBlock(base_ch, base_ch * 2)
-        self.enc3 = ConvBlock(base_ch * 2, base_ch * 4)
-        self.enc4 = ConvBlock(base_ch * 4, base_ch * 8)
 
-        self.pool = nn.MaxPool2d(2)
+        if encoder_depth not in ENCODER_DEPTHS:
+            msg = f"Encoder depth must be one of {ENCODER_DEPTHS}, got {encoder_depth}."
+            raise ValueError(msg)
+        self.encoder_depth = encoder_depth
+        self.in_channels = in_channels
 
-        # アップサンプリング層
-        self.up3 = nn.ConvTranspose2d(base_ch * 8, base_ch * 4, kernel_size=2, stride=2)
-        self.up2 = nn.ConvTranspose2d(base_ch * 4, base_ch * 2, kernel_size=2, stride=2)
-        self.up1 = nn.ConvTranspose2d(base_ch * 2, base_ch, kernel_size=2, stride=2)
+        # Set output channels
+        if out_channels is None:
+            out_channels = in_channels
+        self.out_channels = out_channels
 
-        # デコーダー層
-        self.dec3 = ConvBlock(base_ch * 8, base_ch * 4)
-        self.dec2 = ConvBlock(base_ch * 4, base_ch * 2)
-        self.dec1 = ConvBlock(base_ch * 2, base_ch)
+        # Set decoder channels if not provided
+        if decoder_channels is None:
+            decoder_channels = [512, 256, 128, 64, 32]
 
-        self.final = nn.Conv2d(base_ch, out_ch, kernel_size=1)
+        # Create encoder from TIMM
+        self.encoder = timm.create_model(
+            encoder_name,
+            pretrained=pretrained,
+            features_only=True,
+            in_chans=in_channels,
+            out_indices=list(range(encoder_depth)),
+        )
+
+        # Get encoder output channels for each stage
+        encoder_channels = self.encoder.feature_info.channels()[:encoder_depth]
+
+        # Adjust decoder channels to match encoder depth
+        if len(decoder_channels) > encoder_depth:
+            decoder_channels = decoder_channels[:encoder_depth]
+        elif len(decoder_channels) < encoder_depth:
+            decoder_channels += [decoder_channels[-1]] * (encoder_depth - len(decoder_channels))
+
+        self.decoder_channels = decoder_channels
+
+        # Build decoder
+        self.decoder_blocks = nn.ModuleList()
+        self.upsamples = nn.ModuleList()
+
+        # Reverse encoder channels for bottom-up decoding
+        encoder_channels = encoder_channels[::-1]
+
+        for i in range(len(decoder_channels)):
+            in_ch = encoder_channels[0] if i == 0 else decoder_channels[i - 1]
+
+            # Skip connection channel
+            skip_ch = encoder_channels[i + 1] if i + 1 < len(encoder_channels) else 0
+
+            # Total input channels for this block
+            total_in_ch = in_ch + skip_ch
+
+            self.upsamples.append(nn.ConvTranspose2d(in_ch, in_ch, 2, stride=2))
+            self.decoder_blocks.append(ConvBlock(total_in_ch, decoder_channels[i]))
+
+        # Final segmentation head
+        self.segmentation_head = nn.Conv2d(decoder_channels[-1], out_channels, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # エンコーダー
-        e1 = self.enc1(x)
-        e2 = self.enc2(self.pool(e1))
-        e3 = self.enc3(self.pool(e2))
-        e4 = self.enc4(self.pool(e3))
+        """Forward pass through the UNet model.
 
-        # デコーダー
-        d3 = self.up3(e4)
-        d3 = torch.cat([d3, e3], dim=1)
-        d3 = self.dec3(d3)
+        Args:
+            x: Input tensor of shape (B, C, H, W)
 
-        d2 = self.up2(d3)
-        d2 = torch.cat([d2, e2], dim=1)
-        d2 = self.dec2(d2)
+        Returns:
+            Output tensor of shape (B, out_channels, H, W)
+        """
+        input_size = x.shape[2:]
 
-        d1 = self.up1(d2)
-        d1 = torch.cat([d1, e1], dim=1)
-        d1 = self.dec1(d1)
+        # Encoder
+        encoder_features = self.encoder(x)
 
-        out = self.final(d1)
+        # Reverse for bottom-up decoding
+        encoder_features = encoder_features[::-1]
 
-        return out
+        # Start from the deepest encoder feature
+        d = encoder_features[0]
+
+        # decoder with skip connections
+        for i, (upsample, decoder_block) in enumerate(zip(self.upsamples, self.decoder_blocks, strict=False)):
+            d = upsample(d)
+
+            # Add skip connection if available
+            if i + 1 < len(encoder_features):
+                skip = encoder_features[i + 1]
+                # Handle size mismatch
+                if d.shape[2:] != skip.shape[2:]:
+                    d = nn.functional.interpolate(d, size=skip.shape[2:], mode="bilinear", align_corners=False)
+                d = torch.cat([d, skip], dim=1)
+
+            d = decoder_block(d)
+
+        # Final segmentation
+        output = self.segmentation_head(d)
+
+        # Upsample to input size if needed
+        if output.shape[2:] != input_size:
+            print(f"Upsampling output from {output.shape} to {input_size}")
+            output = nn.functional.interpolate(output, size=input_size, mode="bilinear", align_corners=False)
+
+        return output
+
+
+if __name__ == "__main__":
+    print("=== Same Input/Output Channels (Image-to-Image) ===")
+    # RGB to RGB (image restoration, enhancement, etc.)
+    model = UNet(
+        encoder_name="resnet34",
+        in_channels=3,
+        out_channels=3,  # Same as input
+        decoder_channels=[256, 128, 64, 32, 16],
+    )
+    x = torch.randn(2, 3, 256, 256)
+    output = model(x)
+    print(f"Input shape: {x.shape}")
+    print(f"Output shape: {output.shape}")
+    print(f"Channels match: {output.shape[1] == x.shape[1]}")
+
+    # print("\n=== Auto-match channels (default behavior) ===")
+    # # If out_channels is None, it automatically matches in_channels
+    # model = UNet(
+    #     encoder_name="resnet34",
+    #     in_channels=4,  # e.g., RGBA
+    #     # out_channels not specified, will default to 4
+    #     decoder_channels=[256, 128, 64, 32, 16],
+    # )
+    # x = torch.randn(2, 4, 256, 256)
+    # output = model(x)
+    # print(f"Input: {x.shape[1]} channels, Output: {output.shape[1]} channels")
+
+    # print("\n=== Single Channel (Grayscale) ===")
+    # model = UNet(encoder_name="resnet34", in_channels=1, out_channels=1, decoder_channels=[256, 128, 64, 32, 16])
+    # x = torch.randn(2, 1, 256, 256)
+    # output = model(x)
+    # print(f"Input shape: {x.shape}")
+    # print(f"Output shape: {output.shape}")
+
+    # print("\n=== Different Use Cases ===")
+
+    # # Image denoising
+    # denoising_model = UNet(in_channels=3, out_channels=3)
+    # print("Denoising model: 3 → 3 channels")
+
+    # # Depth estimation
+    # depth_model = UNet(in_channels=3, out_channels=1)
+    # print("Depth model: 3 → 1 channel")
+
+    # # Super-resolution (channels stay same)
+    # sr_model = UNet(in_channels=3, out_channels=3)
+    # print("Super-resolution model: 3 → 3 channels")
+
+    # # Segmentation
+    # seg_model = UNet(in_channels=3, out_channels=10)
+    # print("Segmentation model: 3 → 10 classes")
+
+    # print("\n=== Model Parameters ===")
+    # encoders = ["resnet34", "resnet50", "efficientnet_b0"]
+    # for enc in encoders:
+    #     model = UNet(encoder_name=enc, in_channels=3, out_channels=3, encoder_depth=5)
+    #     params = sum(p.numel() for p in model.parameters()) / 1e6
+    #     print(f"{enc}: {params:.2f}M parameters")
