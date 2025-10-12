@@ -18,6 +18,7 @@ tb-export = "denoiser.tb_event_exporter:main"
 
 [dependency-groups]
 dev = ["ipython>=9.5.0", "pyright>=1.1.405", "ruff>=0.13.1"]
+test = ["pytest>=8.0.0", "pytest-cov>=6.0.0", "pytest-mock>=3.14.0"]
 
 [build-system]
 requires = ["hatchling"]
