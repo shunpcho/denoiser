@@ -10,6 +10,16 @@ def create_model(
     model_name: str, in_channels: int = 3, out_channels: int | None = None, pretrained: bool = True
 ) -> nn.Module:
     """Create UNet model with standard parameters."""
+    if model_name == "resnet34":
+        return UNet(encoder_name=model_name, in_channels=in_channels, out_channels=out_channels, pretrained=pretrained)
+    elif model_name == "vit_base_patch16_224":
+        return UNet(
+            encoder_name=model_name,
+            encoder_depth=4,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            pretrained=pretrained,
+        )
     return UNet(encoder_name=model_name, in_channels=in_channels, out_channels=out_channels, pretrained=pretrained)
 
 

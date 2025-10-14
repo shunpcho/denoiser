@@ -21,7 +21,7 @@ from denoiser.data.data_transformations import (
     random_crop,
     standardize_img,
 )
-from denoiser.models.unet import UNet
+from denoiser.models.build_model import create_model, load_model_checkpoint
 from denoiser.utils.data_utils import collate_fn
 from denoiser.utils.get_logger import create_logger
 from denoiser.utils.tensorboard_log import TensorBoard
@@ -78,7 +78,6 @@ def train(
     )
 
     if pretrain_model_path := train_config.pretrain_model_path:
-        pretrain_model_path = Path(pretrain_model_path)
         if not pretrain_model_path.is_file():
             msg = f"Pretrained model file not found: {pretrain_model_path}"
             logger.error(msg)
@@ -153,14 +152,16 @@ def train(
     logger.info("Data loaders created.")
 
     # Build models...
-    models = UNet(in_ch=img_channels, out_ch=img_channels, base_ch=64).to(device)
+    # models = UNet(in_ch=img_channels, out_ch=img_channels, base_ch=64).to(device)
+    models = create_model(
+        model_name=train_config.model_name, in_channels=img_channels, out_channels=img_channels, pretrained=True
+    ).to(device)
 
     if not pretrain_model_path:
         logger.info("No pretrained model specified, initializing new model.")
     else:
         logger.info(f"Loading pretrained model from {pretrain_model_path}")
-        checkpoint = torch.load(pretrain_model_path, map_location=device)
-        models.load_state_dict(checkpoint["model_state_dict"])
+        models = load_model_checkpoint(models, pretrain_model_path, device)
 
     optimizer = optim.Adam(models.parameters(), lr=train_config.learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
@@ -267,13 +268,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--output_dir", type=Path, default="./results", help="Directory to save results.")
     parser.add_argument("--log_dir", type=Path, default="logs", help="Directory to save logs.")
-
+    parser.add_argument("--model_name", type=str, default="resnet34", help="Model architecture to use.")
     parser.add_argument("--batch_size", type=int, default=4, help="Training batch size.")
     parser.add_argument("--cropsize", type=int, default=None, help="Crop size for training images.")
     parser.add_argument("--noise_sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate for optimizer.")
     parser.add_argument("--iteration", type=int, default=1000, help="Number of training iterations.")
     parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
+    parser.add_argument("--limit", type=int, default=None, help="Limit on number of training samples (optional).")
     parser.add_argument("--pretrain_model_path", type=Path, default=None, help="Path to the pre-trained model.")
     parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging.")
     parser.add_argument(
@@ -299,6 +301,7 @@ if __name__ == "__main__":
     config = TrainConfig.from_optional_kwargs(
         batch_size=args.pop("batch_size"),
         cropsize=args.pop("cropsize"),
+        model_name=args.pop("model_name"),
         noise_sigma=args.pop("noise_sigma"),
         learning_rate=args.pop("learning_rate"),
         iteration=args.pop("iteration"),
