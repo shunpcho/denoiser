@@ -16,13 +16,13 @@ if TYPE_CHECKING:
 from denoiser.utils.data_utils import hwc_to_chw
 
 
-class PairdDataset(Dataset):
+class PairedDataset(Dataset):
     """Load dataset.
 
     Args:
         data_paths: Root directory of images.
         data_loading_fn: Function to load image from path.
-        paring_fn: Function to get paired image paths of clean and noisy.
+        pairing_fn: Function to get paired image paths of clean and noisy.
         img_standardization_fn: Function to standardize image.
         data_augmentation_fn: Function to augment image.
         noise_sigma: If >0, add Gaussian noise with given sigma as std.
@@ -35,20 +35,20 @@ class PairdDataset(Dataset):
         data_paths: Path | list[Path],
         data_loading_fn: Callable[[Path], npt.NDArray[np.uint8]],
         img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
-        paring_fn: Callable[[Path], npt.NDArray[np.uint8]],
+        pairing_fn: Callable[[Path], npt.NDArray[np.uint8]],
         data_augmentation_fn: Callable[
             [npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]
         ]
         | None = None,
-        img_read_keywards: PairingKeyWords | None = None,
+        img_read_keywords: PairingKeyWords | None = None,
         noise_sigma: float = 0.08,
         limit: int | None = None,
     ) -> None:
         self.data_loading_fn = data_loading_fn
         self.img_standardization_fn = img_standardization_fn
-        self.paring_fn = paring_fn
+        self.pairing_fn = pairing_fn
         self.data_augmentation_fn = data_augmentation_fn
-        self.img_read_keywards = img_read_keywards
+        self.img_read_keywords = img_read_keywords
         self.noise_sigma = noise_sigma
 
         exts = [".png", ".jpg", ".jpeg", ".bmp", ".tif"]
@@ -59,7 +59,7 @@ class PairdDataset(Dataset):
             p
             for data_dir in data_paths
             for p in data_dir.rglob("*")
-            if p.suffix.lower() in exts and _match_keywords(p, self.img_read_keywards)
+            if p.suffix.lower() in exts and match_keywords(p, self.img_read_keywords)
         ][:limit]
 
         self.img_paths = sorted(self.img_paths)
@@ -71,14 +71,14 @@ class PairdDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
         clean_path = self.img_paths[idx % len(self.img_paths)]
         img_clean = self.data_loading_fn(clean_path)
-        img_noisy = self.paring_fn(clean_path)
+        img_noisy = self.pairing_fn(clean_path)
         return img_clean, img_noisy
 
 
 class TrainSubset(Dataset):
     """Subset of a dataset for training."""
 
-    def __init__(self, dataset: PairdDataset, indices: list[int]) -> None:
+    def __init__(self, dataset: PairedDataset, indices: list[int]) -> None:
         self.dataset = dataset
         self.indices = indices
 
@@ -103,7 +103,7 @@ class TrainSubset(Dataset):
 class ValSubset(Dataset):
     """Subset of a dataset for validation."""
 
-    def __init__(self, dataset: PairdDataset, indices: list[int]) -> None:
+    def __init__(self, dataset: PairedDataset, indices: list[int]) -> None:
         self.dataset = dataset
         self.indices = indices
 
@@ -122,7 +122,7 @@ class ValSubset(Dataset):
         return img_clean, img_noisy
 
 
-def _match_keywords(p: Path, keywords: PairingKeyWords | None) -> bool:
+def match_keywords(p: Path, keywords: PairingKeyWords | None) -> bool:
     if keywords is None:
         return True
 

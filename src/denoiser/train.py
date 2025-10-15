@@ -12,12 +12,12 @@ import torch.utils.data
 from torch import optim
 
 from denoiser.configs.config import PairingKeyWords, TrainConfig
-from denoiser.data.data_loader import PairdDataset, TrainSubset, ValSubset
+from denoiser.data.data_loader import PairedDataset, TrainSubset, ValSubset
 from denoiser.data.data_transformations import (
     compose_transformations,
     destandardize_img,
     load_img_clean,
-    paring_clean_noisy,
+    pairing_clean_noisy,
     random_crop,
     standardize_img,
 )
@@ -87,13 +87,13 @@ def train(
 
     logger.info("Data loading and preprocessing...")
 
-    paring_words = train_config.pairing_keywords  # Optional[PairingKeyWards]
+    pairing_words = train_config.pairing_keywords  # Optional[PairingKeywords]
     noise_sigma = train_config.noise_sigma
     # Set default crop size if not specified
     crop_size = train_config.cropsize if train_config.cropsize is not None else 256
 
-    clean_img_loader = load_img_clean(paring_words)
-    noisy_img_loader = paring_clean_noisy(paring_words, noise_sigma)
+    clean_img_loader = load_img_clean(pairing_words)
+    noisy_img_loader = pairing_clean_noisy(pairing_words, noise_sigma)
 
     # Create augmentation functions
     crop_fn = random_crop(crop_size)
@@ -112,13 +112,13 @@ def train(
     standardization_fn = standardize_img(mean, std)
     destandardize_img_fn = destandardize_img(mean, std)
 
-    dataset = PairdDataset(
+    dataset = PairedDataset(
         train_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
-        paring_fn=noisy_img_loader,
+        pairing_fn=noisy_img_loader,
         data_augmentation_fn=augmentation_fn,
-        img_read_keywards=paring_words,
+        img_read_keywords=pairing_words,
         noise_sigma=noise_sigma,
         limit=limit,
     )
@@ -264,7 +264,7 @@ if __name__ == "__main__":
         "--noisy_img_keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
     )
     parser.add_argument(
-        "detector_keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
+        "--detector_keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
     )
     parser.add_argument("--output_dir", type=Path, default="./results", help="Directory to save results.")
     parser.add_argument("--log_dir", type=Path, default="logs", help="Directory to save logs.")
