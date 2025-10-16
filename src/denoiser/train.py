@@ -268,7 +268,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--output_dir", type=Path, default="./results", help="Directory to save results.")
     parser.add_argument("--log_dir", type=Path, default="logs", help="Directory to save logs.")
-    parser.add_argument("--model_name", type=str, default="resnet34", help="Model architecture to use.")
+    parser.add_argument("--model_name", type=str, default=None, help="Model architecture to use.")
     parser.add_argument("--batch_size", type=int, default=4, help="Training batch size.")
     parser.add_argument("--cropsize", type=int, default=None, help="Crop size for training images.")
     parser.add_argument("--noise_sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
