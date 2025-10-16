@@ -1,7 +1,7 @@
 [project]
 name = "denoiser"
 dynamic = ["version"]
-description = "Add your description here"
+description = "A framework for deep learning based image restoration, such as noise removal and blur removal."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
