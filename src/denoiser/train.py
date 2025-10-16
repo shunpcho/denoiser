@@ -12,7 +12,7 @@ import torch.utils.data
 from torch import optim
 
 from denoiser.configs.config import PairingKeyWords, TrainConfig
-from denoiser.data.data_loader import PairedDataset, TrainSubset, ValSubset
+from denoiser.data.data_loader import TrainPairedDataset, ValPairedDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
     destandardize_img,
@@ -112,25 +112,26 @@ def train(
     standardization_fn = standardize_img(mean, std)
     destandardize_img_fn = destandardize_img(mean, std)
 
-    dataset = PairedDataset(
+    train_dataset = TrainPairedDataset(
         train_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
         data_augmentation_fn=augmentation_fn,
-        img_read_keywords=pairing_words,
         noise_sigma=noise_sigma,
         limit=limit,
     )
-    dataset_size = len(dataset)
+    val_dataset = ValPairedDataset(
+        train_data_path,
+        data_loading_fn=clean_img_loader,
+        img_standardization_fn=standardization_fn,
+        pairing_fn=noisy_img_loader,
+        noise_sigma=noise_sigma,
+        limit=limit,
+    )
+    dataset_size = len(train_dataset) + len(val_dataset)
     logger.info(f"Dataset size: {dataset_size} samples")
-    train_size = int(0.8 * dataset_size)
-    valid_size = dataset_size - train_size
-    train_subset, valid_subset = torch.utils.data.random_split(dataset, [train_size, valid_size])
-    logger.info(f"Train/Validation split: {train_size}/{valid_size} samples")
-
-    train_dataset = TrainSubset(dataset, train_subset.indices)
-    val_dataset = ValSubset(dataset, valid_subset.indices)
+    logger.info(f"Train/Validation split: {len(train_dataset)}/{len(val_dataset)} samples")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
