@@ -1,14 +1,18 @@
+from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
+import numpy.typing as npt
 import torch
 from PIL import Image
+from torch.utils.data import DataLoader
 
 
 def save_validation_predictions(
     model: torch.nn.Module,
-    val_loader: torch.utils.data.DataLoader,
+    val_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
     device: torch.device,
-    destandardize_fn: callable,
+    destandardize_fn: Callable[[torch.Tensor | npt.NDArray[np.float32]], npt.NDArray[np.uint8]],
     save_dir: Path,
     iteration: int,
     max_samples: int = 4,

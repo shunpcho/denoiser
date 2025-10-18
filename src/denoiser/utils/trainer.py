@@ -20,13 +20,13 @@ class Trainer:
         """
         self.device = device
 
-    def loop(self, *, train: bool = True) -> float: ...
+    def loop(self, *, train: bool = True) -> dict[str, float]: ...
 
-    def train_step(self) -> float:
+    def train_step(self) -> dict[str, float]:
         """Perform a training batch."""
-        return self.loop
+        return self.loop()
 
-    def val_step(self) -> tuple[float, float, float]:
+    def val_step(self) -> dict[str, float]:
         """Perform a validation batch and return loss, PSNR, and SSIM."""
         with torch.no_grad():
             return self.loop(train=False)
@@ -69,8 +69,8 @@ class TrainTrainer(Trainer):
         models: torch.nn.Module,
         optimizers: torch.optim.Optimizer,
         train_config: TrainConfig,
-        train_dataloader: DataLoader,
-        val_dataloader: DataLoader,
+        train_dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
+        val_dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
     ) -> None:
         super().__init__(device=train_config.device)
         self.models = models
@@ -124,6 +124,8 @@ class TrainTrainer(Trainer):
                 self.optimizer.step()
 
             step_losses["Loss"] = step_losses.get("Loss", 0) + loss.item()
+            # step_losses["SSIM"] = step_losses.get("SSIM", 0) + self._calculate_ssim(outputs, clean).item()
+            # step_losses["PSNR"] = step_losses.get("PSNR", 0) + 10 * torch.log10(1 / loss).item()
 
             previous_step_start_time = step_start_time
             current_time = time.perf_counter()

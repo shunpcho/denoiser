@@ -3,20 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
+import numpy.typing as npt
 from torch.utils.data import Dataset
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    import numpy as np
-    import numpy.typing as npt
 
     from denoiser.configs.config import PairingKeyWords
 
 from denoiser.utils.data_utils import hwc_to_chw
 
 
-class PairedDataset(Dataset):
+class PairedDataset(Dataset[tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]]):
     """Load dataset.
 
     Args:
@@ -75,7 +74,9 @@ class PairedDataset(Dataset):
         return img_clean, img_noisy
 
 
-class TrainSubset(Dataset):
+class TrainSubset(
+    Dataset[tuple[npt.NDArray[np.uint8] | npt.NDArray[np.float32], npt.NDArray[np.uint8] | npt.NDArray[np.float32]]]
+):
     """Subset of a dataset for training."""
 
     def __init__(self, dataset: PairedDataset, indices: list[int]) -> None:
@@ -85,7 +86,9 @@ class TrainSubset(Dataset):
     def __len__(self) -> int:
         return len(self.indices)
 
-    def __getitem__(self, idx: int) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[npt.NDArray[np.uint8] | npt.NDArray[np.float32], npt.NDArray[np.uint8] | npt.NDArray[np.float32]]:
         img_clean, img_noisy = self.dataset[self.indices[idx]]
 
         if self.dataset.data_augmentation_fn is not None:
@@ -100,7 +103,9 @@ class TrainSubset(Dataset):
         return img_clean, img_noisy
 
 
-class ValSubset(Dataset):
+class ValSubset(
+    Dataset[tuple[npt.NDArray[np.uint8] | npt.NDArray[np.float32], npt.NDArray[np.uint8] | npt.NDArray[np.float32]]]
+):
     """Subset of a dataset for validation."""
 
     def __init__(self, dataset: PairedDataset, indices: list[int]) -> None:
@@ -110,7 +115,9 @@ class ValSubset(Dataset):
     def __len__(self) -> int:
         return len(self.indices)
 
-    def __getitem__(self, idx: int) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+    def __getitem__(
+        self, idx: int
+    ) -> tuple[npt.NDArray[np.uint8] | npt.NDArray[np.float32], npt.NDArray[np.uint8] | npt.NDArray[np.float32]]:
         img_clean, img_noisy = self.dataset[self.indices[idx]]
 
         img_clean = self.dataset.img_standardization_fn(img_clean)

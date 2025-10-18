@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 MIN_PIXEL_VALUE = 0
 MAX_PIXEL_VALUE = 255
 MIN_DETECTOR_COUNT = 2
-RGB_CHANNELS = 3
 IMAGE_DIMENSIONS_3D = 3  # (H, W, C)
 
 
@@ -40,15 +39,42 @@ def load_img_gray(path: Path) -> npt.NDArray[np.uint8]:
 
 
 def load_img_clean(pairing_words: PairingKeyWords | None) -> Callable[[Path], npt.NDArray[np.uint8]]:
-    """Return function to get clean image loading function based on pairing configuration."""
-    if pairing_words is None:
+    """Return function to get clean image loading function based on pairing configuration.
+
+    This function creates an appropriate image loader based on the detector configuration:
+
+    1. **Two detectors case**: When pairing_words.detector contains 2+ elements, loads
+       images from both detectors as grayscale, expands each to (H, W, 1), and
+       concatenates them channel-wise to create a (H, W, 2) array.
+
+    2. **Single detector case**: When pairing_words.detector contains exactly 1 element,
+       loads the detector image as grayscale and adds a channel dimension to create
+       a (H, W, 1) array.
+
+    3. **Color image case**: When pairing_words is None or has no detector configuration,
+       loads the image as RGB color image, resulting in a (H, W, 3) array.
+
+    Args:
+        pairing_words: Configuration containing detector keywords for multi-detector setups.
+                      If None, defaults to RGB color image loading.
+
+    Returns:
+        A function that takes a Path and returns the appropriate image array based on
+        the detector configuration.
+    """
+    # If pairing_words provided, inspect detector entries
+    if pairing_words is not None:
         # Multi-detector case
-        if len(pairing_words.detector) >= MIN_DETECTOR_COUNT:
+        if pairing_words.detector is not None and len(pairing_words.detector) >= MIN_DETECTOR_COUNT:
+            # capture detector keywords to help static type checkers and avoid subscripting None
+            det0 = pairing_words.detector[0]
+            det1 = pairing_words.detector[1]
 
             def load_dual_detector(path: Path) -> npt.NDArray[np.uint8]:
                 """Load two detector images and concatenate channel-wise."""
                 detect_a_path = path
-                detect_b_path = path.with_name(path.name.replace(pairing_words.detector[0], pairing_words.detector[1]))
+                detect_b_name = path.name.replace(det0, det1)
+                detect_b_path = path.with_name(detect_b_name)
                 img_detect_a = load_img_gray(detect_a_path)
                 img_detect_b = load_img_gray(detect_b_path)
                 # Expand dimensions: (H, W) -> (H, W, 1)
@@ -60,7 +86,7 @@ def load_img_clean(pairing_words: PairingKeyWords | None) -> Callable[[Path], np
             return load_dual_detector
 
         # Single detector case
-        elif len(pairing_words.detector) == 1:
+        if pairing_words.detector is not None and len(pairing_words.detector) == 1:
 
             def load_single_detector(path: Path) -> npt.NDArray[np.uint8]:
                 """Load single detector image as grayscale with channel dimension."""
@@ -115,14 +141,15 @@ def pairing_clean_noisy(
 
     # Case 3: Load detector images
     if pairing_words.detector is not None and len(pairing_words.detector) >= MIN_DETECTOR_COUNT:
+        # capture detector keywords to help static type checkers and avoid subscripting None
+        det0 = pairing_words.detector[0]
+        det1 = pairing_words.detector[1]
 
         def load_noisy_dual_detector(path: Path) -> npt.NDArray[np.uint8]:
             """Load dual detector noisy images and concatenate channel-wise."""
             noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
             detect_a_path = noisy_path
-            detect_b_path = noisy_path.with_name(
-                noisy_path.name.replace(pairing_words.detector[0], pairing_words.detector[1])
-            )
+            detect_b_path = noisy_path.with_name(noisy_path.name.replace(det0, det1))
             img_detect_a = load_img_gray(detect_a_path)
             img_detect_b = load_img_gray(detect_b_path)
             # Expand dimensions: (H, W) -> (H, W, 1)
@@ -133,7 +160,7 @@ def pairing_clean_noisy(
 
         return load_noisy_dual_detector
 
-    elif len(pairing_words.detector) == 1:
+    elif pairing_words.detector is not None and len(pairing_words.detector) == 1:
 
         def load_noisy_single_detector(path: Path) -> npt.NDArray[np.uint8]:
             """Load single detector noisy image as grayscale with channel dimension."""
@@ -181,9 +208,8 @@ def compose_transformations(
 
 # img_standardization_fn
 def standardize_img(
-    mean: float | tuple[float, float] | tuple[float, float, float],
-    std: float | tuple[float, float] | tuple[float, float, float],
-) -> Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]]:
+    mean: tuple[float, ...], std: tuple[float, ...]
+) -> Callable[[npt.NDArray[np.uint8 | np.float32]], npt.NDArray[np.float32]]:
     """Create function to standardize image.
 
     Args:
@@ -193,21 +219,22 @@ def standardize_img(
     Returns:
         Function to standardize image.
     """
-    mean = np.array(mean, dtype=np.float32)
-    std = np.array(std, dtype=np.float32)
-    max_val = 255.0
+    mean_arr = np.array(mean, dtype=np.float32)
+    std_arr = np.array(std, dtype=np.float32)
+    max_val = np.float32(255.0)
 
-    def standardize(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.float32]:
+    def standardize(img: npt.NDArray[np.uint8 | np.float32]) -> npt.NDArray[np.float32]:
         # Convert uint8 to float32 first to avoid type mismatch
         img = img.astype(np.float32)
-        return (img - mean * max_val) / (std * max_val)
+        out = (img - mean_arr * max_val) / (std_arr * max_val)
+        # Ensure the returned array is float32 to satisfy the annotated return type
+        return out.astype(np.float32)
 
     return standardize
 
 
 def destandardize_img(
-    mean: float | tuple[float, float] | tuple[float, float, float],
-    std: float | tuple[float, float] | tuple[float, float, float],
+    mean: tuple[float, ...], std: tuple[float, ...]
 ) -> Callable[[npt.NDArray[np.float32] | torch.Tensor], npt.NDArray[np.uint8]]:
     """Create function to destandardize image.
 
@@ -218,19 +245,21 @@ def destandardize_img(
     Returns:
         Function to destandardize image.
     """
-    mean = np.array(mean, dtype=np.float32)
-    std = np.array(std, dtype=np.float32)
+    mean_arr = np.array(mean, dtype=np.float32)
+    std_arr = np.array(std, dtype=np.float32)
     max_val = 255.0
 
     def destandardize(img: npt.NDArray[np.float32] | torch.Tensor) -> npt.NDArray[np.uint8]:
         if isinstance(img, torch.Tensor):
             # (C, H, W) -> (H, W, C) for single image, or (N, C, H, W) -> (N, H, W, C) for batch
             batch_dims = 4
-            img = img.permute(0, 2, 3, 1) if img.dim() == batch_dims else img.permute(1, 2, 0)
-            img = img.cpu().detach().numpy()
-        img = (img * std + mean) * max_val
-        img = np.clip(img, a_min=0, a_max=255).astype(np.uint8)
-        return img
+            arr = img.permute(0, 2, 3, 1) if img.dim() == batch_dims else img.permute(1, 2, 0)
+            arr = arr.cpu().detach().numpy()
+        else:
+            arr = img
+        out = (arr * std_arr + mean_arr) * max_val
+        out = np.clip(out, a_min=0, a_max=255).astype(np.uint8)
+        return out
 
     return destandardize
 
@@ -264,7 +293,10 @@ def destandardize_tensor(
 # Augmentation functions
 def random_crop(
     crop_size: int | tuple[int, int] | None,
-) -> Callable[[npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]]:
+) -> Callable[
+    [npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]],
+    tuple[npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]],
+]:
     """Create function to perform random crop on image.
 
     Args:
@@ -278,8 +310,8 @@ def random_crop(
     if crop_size is None:
 
         def no_crop(
-            img_clean: npt.NDArray[np.uint8], img_noisy: npt.NDArray[np.uint8]
-        ) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
+            img_clean: npt.NDArray[np.uint8 | np.float32], img_noisy: npt.NDArray[np.uint8 | np.float32]
+        ) -> tuple[npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]]:
             return img_clean, img_noisy
 
         return no_crop
@@ -290,8 +322,8 @@ def random_crop(
         crop_h, crop_w = crop_size
 
     def rnd_crop(
-        img_clean: npt.NDArray[np.uint8], img_noisy: npt.NDArray[np.uint8]
-    ) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
+        img_clean: npt.NDArray[np.uint8 | np.float32], img_noisy: npt.NDArray[np.uint8 | np.float32]
+    ) -> tuple[npt.NDArray[np.uint8 | np.float32], npt.NDArray[np.uint8 | np.float32]]:
         h, w = img_clean.shape[:2]
 
         # If image is smaller than crop size, return original image
@@ -300,8 +332,8 @@ def random_crop(
 
         # Generate random top-left corner
         rng = np.random.default_rng()
-        top = rng.integers(0, h - crop_h + 1)
-        left = rng.integers(0, w - crop_w + 1)
+        top: int = int(rng.integers(0, int(h - crop_h + 1)))
+        left: int = int(rng.integers(0, int(w - crop_w + 1)))
 
         # Perform crop
         if len(img_clean.shape) == IMAGE_DIMENSIONS_3D:  # RGB or multi-channel (H, W, C)
@@ -337,7 +369,7 @@ def specific_crop(
 
         for crop_y in range(0, h, crop_h):
             for crop_x in range(0, w, crop_w):
-                if len(img.shape) == RGB_CHANNELS:  # RGB or multi-channel
+                if len(img.shape) == IMAGE_DIMENSIONS_3D:  # RGB or multi-channel
                     img_crop = img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w, :]
                 else:  # Grayscale
                     img_crop = img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]

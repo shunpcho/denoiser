@@ -48,10 +48,10 @@ def train(
     Raises:
         FileNotFoundError: If pretrained model file is specified but not found
     """
-    seed = 42
+    seed: int = 42
     random.seed(seed)
     # Set up modern numpy random generator for reproducibility
-    _ = np.random.default_rng(seed)  # Ensures reproducible numpy operations
+    _ = np.random.default_rng(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -90,7 +90,7 @@ def train(
     pairing_words = train_config.pairing_keywords  # Optional[PairingKeywords]
     noise_sigma = train_config.noise_sigma
     # Set default crop size if not specified
-    crop_size = train_config.cropsize if train_config.cropsize is not None else 256
+    crop_size = train_config.cropsize or 256
 
     clean_img_loader = load_img_clean(pairing_words)
     noisy_img_loader = pairing_clean_noisy(pairing_words, noise_sigma)
@@ -107,8 +107,8 @@ def train(
 
     # Create standardization function (normalize to [0, 1] range)
     # For RGB images: convert uint8 [0, 255] to float32 [0, 1]
-    mean = (0.0,) * img_channels
-    std = (1.0,) * img_channels
+    mean: tuple[float, ...] = (0.0,) * img_channels
+    std: tuple[float, ...] = (1.0,) * img_channels
     standardization_fn = standardize_img(mean, std)
     destandardize_img_fn = destandardize_img(mean, std)
 

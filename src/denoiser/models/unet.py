@@ -70,7 +70,7 @@ class UNet(nn.Module):
         )
 
         # Get encoder output channels for each stage
-        encoder_channels = self.encoder.feature_info.channels()[:encoder_depth]
+        encoder_channels = self.encoder.feature_info.channels[:encoder_depth]
 
         # Adjust decoder channels to match encoder depth
         if len(decoder_channels) > encoder_depth:

@@ -41,7 +41,6 @@ class TrainConfig:
     # Required fields (no defaults) must come first
     batch_size: int
     cropsize: int
-    model_name: str
     learning_rate: float
     iteration: int
     interval: int
@@ -51,9 +50,11 @@ class TrainConfig:
     output_dir: Path = Path("./results")
     log_dir: Path = Path("logs")
 
+    model_name: str | None = None
+
     pairing_keywords: PairingKeyWords | None = None
 
-    pretrain_model_path: str | None = None
+    pretrain_model_path: Path | None = None
 
     tensorboard: bool = False
 
@@ -73,4 +74,4 @@ class TrainConfig:
         Returns:
             An instance of TrainConfig with specified and default values.
         """
-        return cls(**{key: value for key, value in kwargs.items() if value is not None})
+        return cls(**{key: value for key, value in kwargs.items() if value is not None})  # pyright: ignore[reportArgumentType]

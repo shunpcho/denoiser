@@ -13,7 +13,7 @@ from denoiser.data.data_transformations import (
     load_img,
     standardize_img,
 )
-from denoiser.models.unet import UNet
+from denoiser.models.simple_unet import UNet
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -107,6 +107,7 @@ def load_model(
 
     # Initialize model
     model = UNet(in_ch=in_ch, out_ch=out_ch, base_ch=base_ch)
+    # TODO: Make model architecture configurable
 
     # Load checkpoint
     checkpoint = torch.load(model_path, map_location=device)
@@ -182,7 +183,7 @@ def batch_denoise(
         raise FileNotFoundError(msg)
 
     # Find all image files
-    image_files = []
+    image_files: list[Path] = []
     for ext in image_extensions:
         image_files.extend(input_dir.glob(f"*{ext}"))
         image_files.extend(input_dir.glob(f"*{ext.upper()}"))

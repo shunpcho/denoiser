@@ -8,12 +8,14 @@ from typing import Self, TYPE_CHECKING
 import numpy as np
 import numpy.typing as npt
 import torch
-from torch.utils.data import DataLoader
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
 
+    import numpy as np
+    import numpy.typing as npt
+    from torch.utils.data import DataLoader
     from torch.utils.tensorboard import SummaryWriter
 
 try:
@@ -28,7 +30,7 @@ class TensorBoard:
     def __init__(
         self,
         log_dir: Path | str,
-        dataloader: DataLoader,
+        dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
         device: torch.device,
         crop_size: int | tuple[int, int],
         destandardize_img_fn: Callable[[npt.NDArray[np.float32] | torch.Tensor], npt.NDArray[np.uint8]],
@@ -275,9 +277,9 @@ class TensorBoard:
             noisy_viz = torch.clamp(noisy_images[:n_samples], 0, 1)
             pred_viz = torch.clamp(predictions[:n_samples], 0, 1)
 
-            self.log_images("Sample/Clean", clean_viz, step)
-            self.log_images("Sample/Noisy", noisy_viz, step)
-            self.log_images("Sample/Predictions", pred_viz, step)
+            self.writer.add_images("Sample/Clean", clean_viz, step)
+            self.writer.add_images("Sample/Noisy", noisy_viz, step)
+            self.writer.add_images("Sample/Predictions", pred_viz, step)
 
     def close(self) -> None:
         """Close the TensorBoard writer."""

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import overload
+
 import numpy as np
 import numpy.typing as npt
 import torch
+
+IMAGE_DIMENSIONS_3D = 3  # Number of color channels (e.g., RGB)
 
 
 def collate_fn(
@@ -17,8 +21,8 @@ def collate_fn(
     Returns:
         Tuple of batched tensors (clean_batch, noisy_batch)
     """
-    clean_imgs = []
-    noisy_imgs = []
+    clean_imgs: list[torch.Tensor] = []
+    noisy_imgs: list[torch.Tensor] = []
 
     for clean_img, noisy_img in batch:
         # Convert numpy arrays to tensors
@@ -35,6 +39,14 @@ def collate_fn(
     return clean_batch, noisy_batch
 
 
+@overload
+def hwc_to_chw(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]: ...
+
+
+@overload
+def hwc_to_chw(img: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]: ...
+
+
 def hwc_to_chw(img: npt.NDArray[np.uint8] | npt.NDArray[np.float32]) -> npt.NDArray[np.uint8] | npt.NDArray[np.float32]:
     """Convert image from (H, W, C) to (C, H, W).
 
@@ -48,10 +60,18 @@ def hwc_to_chw(img: npt.NDArray[np.uint8] | npt.NDArray[np.float32]) -> npt.NDAr
         ValueError: If the input image does not have 3 dimensions.
 
     """
-    if img.ndim != 3:  # Color dim
+    if img.ndim != IMAGE_DIMENSIONS_3D:
         msg = f"Expected 3D array (H, W, C), got shape {img.shape}"
         raise ValueError(msg)
-    return np.transpose(img, (2, 0, 1))
+    return np.transpose(img, (2, 0, 1))  # type: ignore[return-value]
+
+
+@overload
+def chw_to_hwc(img: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]: ...
+
+
+@overload
+def chw_to_hwc(img: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]: ...
 
 
 def chw_to_hwc(img: npt.NDArray[np.uint8] | npt.NDArray[np.float32]) -> npt.NDArray[np.uint8] | npt.NDArray[np.float32]:
@@ -67,7 +87,7 @@ def chw_to_hwc(img: npt.NDArray[np.uint8] | npt.NDArray[np.float32]) -> npt.NDAr
         ValueError: If the input image does not have 3 dimensions.
 
     """
-    if img.ndim != 3:  # Color dim
+    if img.ndim != IMAGE_DIMENSIONS_3D:
         msg = f"Expected 3D array (C, H, W), got shape {img.shape}"
         raise ValueError(msg)
-    return np.transpose(img, (1, 2, 0))
+    return np.transpose(img, (1, 2, 0))  # type: ignore[return-value]

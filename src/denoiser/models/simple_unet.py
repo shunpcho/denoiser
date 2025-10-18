@@ -26,12 +26,12 @@ class UNet(nn.Module):
 
         self.pool = nn.MaxPool2d(2)
 
-        # アップサンプリング層
+        # Upsampling layers
         self.up3 = nn.ConvTranspose2d(base_ch * 8, base_ch * 4, kernel_size=2, stride=2)
         self.up2 = nn.ConvTranspose2d(base_ch * 4, base_ch * 2, kernel_size=2, stride=2)
         self.up1 = nn.ConvTranspose2d(base_ch * 2, base_ch, kernel_size=2, stride=2)
 
-        # デコーダー層
+        # Decoder layers
         self.dec3 = ConvBlock(base_ch * 8, base_ch * 4)
         self.dec2 = ConvBlock(base_ch * 4, base_ch * 2)
         self.dec1 = ConvBlock(base_ch * 2, base_ch)
@@ -39,13 +39,13 @@ class UNet(nn.Module):
         self.final = nn.Conv2d(base_ch, out_ch, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # エンコーダー
+        # Encoder
         e1 = self.enc1(x)
         e2 = self.enc2(self.pool(e1))
         e3 = self.enc3(self.pool(e2))
         e4 = self.enc4(self.pool(e3))
 
-        # デコーダー
+        # Decoder
         d3 = self.up3(e4)
         d3 = torch.cat([d3, e3], dim=1)
         d3 = self.dec3(d3)
