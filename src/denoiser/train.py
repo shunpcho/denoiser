@@ -97,7 +97,7 @@ def train(
 
     # Create augmentation functions
     crop_fn = random_crop(crop_size)
-    augmentation_fn = compose_transformations([crop_fn])
+    augmentation_fn = compose_transformations([crop_fn])  # type: ignore[arg-type]
 
     logger.info(f"Clean image loader configured: {clean_img_loader.__name__}")
     logger.info(f"Noisy image loader configured: {noisy_img_loader.__name__}")
@@ -117,7 +117,7 @@ def train(
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
-        data_augmentation_fn=augmentation_fn,
+        data_augmentation_fn=augmentation_fn,  # type: ignore[arg-type]
         noise_sigma=noise_sigma,
         limit=limit,
     )
