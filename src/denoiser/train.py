@@ -32,7 +32,7 @@ from denoiser.utils.vis_img import save_validation_predictions
 def train(
     train_data_path: Path,
     train_config: TrainConfig,
-    valid_data_path: Path | None = None,
+    val_data_path: Path | None = None,
     limit: int | None = None,
     verbose: Literal["debug", "info", "error"] = "info",
 ) -> None:
@@ -40,7 +40,7 @@ def train(
 
     Args:
         train_data_path: Path to training data directory
-        valid_data_path: Path to validation data directory
+        val_data_path: Path to validation data directory
         train_config: Training configuration
         limit: Optional limit on number of samples to use
         verbose: Logging verbosity level
@@ -63,8 +63,9 @@ def train(
     logger = create_logger("denoiser", log_dir, verbose)
 
     logger.info(f"Training data path: {train_data_path}")
-    if valid_data_path:
-        logger.info(f"Validation data path: {valid_data_path}")
+    if val_data_path is None:
+        val_data_path = train_data_path
+    logger.info(f"Validation data path: {val_data_path}")
     logger.info(f"Training configuration: {train_config}")
 
     logger.info("Created output and log directories.")
@@ -122,7 +123,7 @@ def train(
         limit=limit,
     )
     val_dataset = ValPairedDataset(
-        train_data_path,
+        val_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
@@ -256,7 +257,7 @@ def train(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a denoiser model.")
     parser.add_argument("--train_data_path", type=Path, required=True, help="Path to the training data.")
-    parser.add_argument("--valid_data_path", type=Path, default=None, help="Path to the validation data (optional).")
+    parser.add_argument("--val_data_path", type=Path, default=None, help="Path to the validation data (optional).")
 
     parser.add_argument(
         "--clean_img_keyword", type=str, default=None, help="Keyword to identify clean images in filename."
