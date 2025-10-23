@@ -156,6 +156,6 @@ def _load_image_paths(data_paths: list[Path] | Path, mode: str) -> list[Path]:
 
         with indices_path.open(encoding="utf-8") as f:
             files = json.load(f)
-        img_paths += [p for p in data_path.rglob("*") if str(p) in files]
+        img_paths += [Path(p) for p in files]
 
     return img_paths
