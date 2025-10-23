@@ -154,7 +154,7 @@ def _load_image_paths(data_paths: list[Path] | Path, mode: str) -> list[Path]:
             msg = f"Indices directory not found: {indices_path}. Please create train/val split first."
             raise FileNotFoundError(msg)
 
-        with Path(indices_path).open(encoding="utf-8") as f:
+        with indices_path.open(encoding="utf-8") as f:
             files = json.load(f)
         img_paths += [p for p in data_path.rglob("*") if str(p) in files]
 
