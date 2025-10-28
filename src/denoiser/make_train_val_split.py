@@ -75,4 +75,3 @@ if __name__ == "__main__":
         else None
     )
     split_train_val(**args, img_read_keywords=pairing_keywords)
-# python src/denoiser/make_train_val_split.py --data_dir data/CC15 --clean_img_keyword mean --noisy_img_keyword real
