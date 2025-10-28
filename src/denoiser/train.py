@@ -255,30 +255,30 @@ def train(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a denoiser model.")
-    parser.add_argument("--train_data_path", type=Path, required=True, help="Path to the training data.")
-    parser.add_argument("--val_data_path", type=Path, default=None, help="Path to the validation data (optional).")
+    parser.add_argument("--train-data-path", type=Path, required=True, help="Path to the training data.")
+    parser.add_argument("--val-data-path", type=Path, default=None, help="Path to the validation data (optional).")
 
     parser.add_argument(
-        "--clean_img_keyword", type=str, default=None, help="Keyword to identify clean images in filename."
+        "--clean-img-keyword", type=str, default=None, help="Keyword to identify clean images in filename."
     )
     parser.add_argument(
-        "--noisy_img_keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
+        "--noisy-img-keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
     )
     parser.add_argument(
-        "--detector_keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
+        "--detector-keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
     )
-    parser.add_argument("--output_dir", type=Path, default="./results", help="Directory to save results.")
-    parser.add_argument("--log_dir", type=Path, default="logs", help="Directory to save logs.")
-    parser.add_argument("--model_name", type=str, default=None, help="Model architecture to use.")
-    parser.add_argument("--batch_size", type=int, default=4, help="Training batch size.")
+    parser.add_argument("--output-dir", type=Path, default="./results", help="Directory to save results.")
+    parser.add_argument("--log-dir", type=Path, default="logs", help="Directory to save logs.")
+    parser.add_argument("--model-name", type=str, default=None, help="Model architecture to use.")
+    parser.add_argument("--batch-size", type=int, default=4, help="Training batch size.")
     parser.add_argument("--cropsize", type=int, default=None, help="Crop size for training images.")
-    parser.add_argument("--noise_sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
-    parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate for optimizer.")
+    parser.add_argument("--noise-sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
+    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate for optimizer.")
     parser.add_argument("--iteration", type=int, default=1000, help="Number of training iterations.")
     parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
     parser.add_argument("--limit", type=int, default=None, help="Limit on number of training samples (optional).")
-    parser.add_argument("--pretrain_model_path", type=Path, default=None, help="Path to the pre-trained model.")
-    parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging.")
+    parser.add_argument("--pretrain-model-path", type=Path, default=None, help="Path to the pre-trained model.")
+    parser.add_argument("--tensorboard", action="store-true", default=True, help="Enable TensorBoard logging.")
     parser.add_argument(
         "--verbose", type=str, choices=["debug", "info", "error"], default="info", help="Logging verbosity level."
     )
