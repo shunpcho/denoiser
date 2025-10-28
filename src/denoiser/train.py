@@ -63,8 +63,7 @@ def train(
     logger = create_logger("denoiser", log_dir, verbose)
 
     logger.info(f"Training data path: {train_data_path}")
-    if val_data_path is None:
-        val_data_path = train_data_path
+    val_data_path = val_data_path or train_data_path
     logger.info(f"Validation data path: {val_data_path}")
     logger.info(f"Training configuration: {train_config}")
 
