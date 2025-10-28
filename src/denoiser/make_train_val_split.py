@@ -20,9 +20,7 @@ def split_train_val(
     """
     exts = [".png", ".jpg", ".jpeg", ".bmp", ".tif"]
 
-    files: list[Path] = [
-        p for p in data_dir.rglob("*") if p.suffix.lower() in exts and _match_keywords(p, img_read_keywords)
-    ]
+    files = [p for p in data_dir.rglob("*") if p.suffix.lower() in exts and _match_keywords(p, img_read_keywords)]
 
     # Split into train and val
     random.seed(42)
