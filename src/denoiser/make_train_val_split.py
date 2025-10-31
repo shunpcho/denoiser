@@ -51,15 +51,15 @@ def _match_keywords(p: Path, keywords: PairingKeyWords | None) -> bool:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=Path, required=True, help="Path to the training data.")
+    parser.add_argument("--data-dir", type=Path, required=True, help="Path to the training data.")
     parser.add_argument(
-        "--clean_img_keyword", type=str, default=None, help="Keyword to identify clean images in filename."
+        "--clean-img-keyword", type=str, default=None, help="Keyword to identify clean images in filename."
     )
     parser.add_argument(
-        "--noisy_img_keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
+        "--noisy-img-keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
     )
     parser.add_argument(
-        "--detector_keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
+        "--detector-keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
     )
 
     args = parser.parse_args()
