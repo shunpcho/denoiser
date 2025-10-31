@@ -12,7 +12,7 @@ import torch.utils.data
 from torch import optim
 
 from denoiser.configs.config import PairingKeyWords, TrainConfig
-from denoiser.data.data_loader import TrainPairedDataset, ValPairedDataset
+from denoiser.data.data_loader import PairedDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
     destandardize_img,
@@ -112,7 +112,7 @@ def train(
     standardization_fn = standardize_img(mean, std)
     destandardize_img_fn = destandardize_img(mean, std)
 
-    train_dataset = TrainPairedDataset(
+    train_dataset = PairedDataset(
         train_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
@@ -121,11 +121,12 @@ def train(
         noise_sigma=noise_sigma,
         limit=limit,
     )
-    val_dataset = ValPairedDataset(
+    val_dataset = PairedDataset(
         val_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
+        mode="val",
         noise_sigma=noise_sigma,
         limit=limit,
     )
