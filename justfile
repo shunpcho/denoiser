@@ -30,3 +30,9 @@ inference:
         --model "./results/best_model.pth" \
         --input "./data/CC15_inf" \
         --output "./results/inf"
+
+data_split:
+    uv run python src/denoiser/make_train_val_split.py \
+        --data-dir "data/CC15" \
+        --clean-img-keyword "_mean" \
+        --noisy-img-keyword "_real" \
