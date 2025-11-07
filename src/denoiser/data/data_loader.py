@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from typing import Literal
 
 
 from denoiser.utils.data_utils import hwc_to_chw
@@ -42,7 +43,7 @@ class PairedDataset(
             [npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]
         ]
         | None = None,
-        mode: str = "train",
+        mode: Literal["train", "val"] = "train",
         noise_sigma: float = 0.08,
         limit: int | None = None,
     ) -> None:
