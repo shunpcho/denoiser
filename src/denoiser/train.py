@@ -279,7 +279,7 @@ if __name__ == "__main__":
     parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
     parser.add_argument("--limit", type=int, default=None, help="Limit on number of training samples (optional).")
     parser.add_argument("--pretrain-model-path", type=Path, default=None, help="Path to the pre-trained model.")
-    parser.add_argument("--tensorboard", action="store-true", default=True, help="Enable TensorBoard logging.")
+    parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging.")
     parser.add_argument(
         "--verbose", type=str, choices=["debug", "info", "error"], default="info", help="Logging verbosity level."
     )
