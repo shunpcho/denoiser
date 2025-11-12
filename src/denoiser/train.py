@@ -254,7 +254,8 @@ def train(
         logger.info("TensorBoard logger closed.")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Command-line interface for training the denoiser model."""
     parser = argparse.ArgumentParser(description="Train a denoiser model.")
     parser.add_argument("--train-data-path", type=Path, required=True, help="Path to the training data.")
     parser.add_argument("--val-data-path", type=Path, default=None, help="Path to the validation data (optional).")
@@ -322,3 +323,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Training failed with error: {e}")
         raise
+
+
+if __name__ == "__main__":
+    main()
