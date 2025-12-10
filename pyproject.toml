@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tb-export = "denoiser.tb_event_exporter:main"
+train = "denoiser.train:main"
 
 [dependency-groups]
 dev = ["ipython>=9.5.0", "pyright>=1.1.405", "ruff>=0.13.1"]

@@ -1,5 +1,5 @@
 train:
-    uv run python src/denoiser/train.py \
+    train \
         --train_data_path "data/CC15" \
         --clean_img_keyword "_mean" \
         --noisy_img_keyword "_real" \
@@ -13,7 +13,7 @@ train:
         --log_dir "logs" \
 
 train_minimal:
-    uv run python src/denoiser/train.py \
+    train \
         --train-data-path "data/CC15" \
         --clean-img-keyword "_mean" \
         --noisy-img-keyword "_real" \
