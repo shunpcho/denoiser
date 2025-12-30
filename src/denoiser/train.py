@@ -90,7 +90,7 @@ def train(
     pairing_words = train_config.pairing_keywords  # Optional[PairingKeywords]
     noise_sigma = train_config.noise_sigma
     # Set default crop size if not specified
-    crop_size = train_config.cropsize or 256
+    crop_size = train_config.crop_size or 256
 
     clean_img_loader = load_img_clean(pairing_words)
     noisy_img_loader = pairing_clean_noisy(pairing_words, noise_sigma)
@@ -188,7 +188,7 @@ def train(
         log_dir=tblog_dir,
         dataloader=val_loader,
         device=device,
-        crop_size=train_config.cropsize,
+        crop_size=train_config.crop_size,
         destandardize_img_fn=destandardize_img_fn,
         max_outputs=4,
     )
@@ -196,7 +196,7 @@ def train(
         logger.info(f"TensorBoard logging enabled: {tblog_dir}")
 
     if train_config.tensorboard:
-        sample_input = torch.randn(1, 3, train_config.cropsize, train_config.cropsize).to(device)
+        sample_input = torch.randn(1, 3, train_config.crop_size, train_config.crop_size).to(device)
         tb_logger.log_model_graph(models, sample_input)
         logger.info("Model graph logged to TensorBoard.")
 
@@ -273,7 +273,7 @@ def main() -> None:
     parser.add_argument("--log-dir", type=Path, default="logs", help="Directory to save logs.")
     parser.add_argument("--model-name", type=str, default=None, help="Model architecture to use.")
     parser.add_argument("--batch-size", type=int, default=4, help="Training batch size.")
-    parser.add_argument("--cropsize", type=int, default=None, help="Crop size for training images.")
+    parser.add_argument("--crop-size", type=int, default=None, help="Crop size for training images.")
     parser.add_argument("--noise-sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
     parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate for optimizer.")
     parser.add_argument("--iteration", type=int, default=1000, help="Number of training iterations.")
@@ -303,7 +303,7 @@ def main() -> None:
     # Create training configuration
     config = TrainConfig.from_optional_kwargs(
         batch_size=args.pop("batch_size"),
-        cropsize=args.pop("cropsize"),
+        crop_size=args.pop("crop_size"),
         model_name=args.pop("model_name"),
         noise_sigma=args.pop("noise_sigma"),
         learning_rate=args.pop("learning_rate"),
