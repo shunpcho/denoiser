@@ -59,6 +59,32 @@ sh script/sample_dataset.sh download unzip
 
 </details>
 
+### Split dataset into train and val and Make list of file paths to json file
+
+- Run script and save the list
+
+```bash
+python src/denoiser/make_train_val_split.py \
+--data_dir data/CC15 \
+--clean_img_keyword _mean \
+--noisy_img_keyword _real
+```
+
+- This generates train/validation split files (80/20 ratio by default):
+
+```
+data/<dataset name>
+|-- indices
+|   |-- train_list.json
+|   `-- val_list.json
+|-- ~_mean.png
+|-- ~_real.png
+:
+```
+
+The script uses a fixed random seed (42) for reproducible splits.
+
+
 ### Training
 
 Example command for training with sample data:

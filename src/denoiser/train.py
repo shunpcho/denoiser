@@ -12,7 +12,7 @@ import torch.utils.data
 from torch import optim
 
 from denoiser.configs.config import PairingKeyWords, TrainConfig
-from denoiser.data.data_loader import PairedDataset, TrainSubset, ValSubset
+from denoiser.data.data_loader import PairedDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
     destandardize_img,
@@ -32,7 +32,7 @@ from denoiser.utils.vis_img import save_validation_predictions
 def train(
     train_data_path: Path,
     train_config: TrainConfig,
-    valid_data_path: Path | None = None,
+    val_data_path: Path | None = None,
     limit: int | None = None,
     verbose: Literal["debug", "info", "error"] = "info",
 ) -> None:
@@ -40,7 +40,7 @@ def train(
 
     Args:
         train_data_path: Path to training data directory
-        valid_data_path: Path to validation data directory
+        val_data_path: Path to validation data directory
         train_config: Training configuration
         limit: Optional limit on number of samples to use
         verbose: Logging verbosity level
@@ -63,8 +63,8 @@ def train(
     logger = create_logger("denoiser", log_dir, verbose)
 
     logger.info(f"Training data path: {train_data_path}")
-    if valid_data_path:
-        logger.info(f"Validation data path: {valid_data_path}")
+    val_data_path = val_data_path or train_data_path
+    logger.info(f"Validation data path: {val_data_path}")
     logger.info(f"Training configuration: {train_config}")
 
     logger.info("Created output and log directories.")
@@ -90,14 +90,14 @@ def train(
     pairing_words = train_config.pairing_keywords  # Optional[PairingKeywords]
     noise_sigma = train_config.noise_sigma
     # Set default crop size if not specified
-    crop_size = train_config.cropsize or 256
+    crop_size = train_config.crop_size or 256
 
     clean_img_loader = load_img_clean(pairing_words)
     noisy_img_loader = pairing_clean_noisy(pairing_words, noise_sigma)
 
     # Create augmentation functions
     crop_fn = random_crop(crop_size)
-    augmentation_fn = compose_transformations([crop_fn])
+    augmentation_fn = compose_transformations([crop_fn])  # type: ignore[arg-type]
 
     logger.info(f"Clean image loader configured: {clean_img_loader.__name__}")
     logger.info(f"Noisy image loader configured: {noisy_img_loader.__name__}")
@@ -112,25 +112,28 @@ def train(
     standardization_fn = standardize_img(mean, std)
     destandardize_img_fn = destandardize_img(mean, std)
 
-    dataset = PairedDataset(
+    train_dataset = PairedDataset(
         train_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
-        data_augmentation_fn=augmentation_fn,
-        img_read_keywords=pairing_words,
+        data_augmentation_fn=augmentation_fn,  # type: ignore[arg-type]
         noise_sigma=noise_sigma,
         limit=limit,
     )
-    dataset_size = len(dataset)
+    val_dataset = PairedDataset(
+        val_data_path,
+        data_loading_fn=clean_img_loader,
+        img_standardization_fn=standardization_fn,
+        pairing_fn=noisy_img_loader,
+        data_augmentation_fn=augmentation_fn,  # type: ignore[arg-type]
+        mode="val",
+        noise_sigma=noise_sigma,
+        limit=limit,
+    )
+    dataset_size = len(train_dataset) + len(val_dataset)
     logger.info(f"Dataset size: {dataset_size} samples")
-    train_size = int(0.8 * dataset_size)
-    valid_size = dataset_size - train_size
-    train_subset, valid_subset = torch.utils.data.random_split(dataset, [train_size, valid_size])
-    logger.info(f"Train/Validation split: {train_size}/{valid_size} samples")
-
-    train_dataset = TrainSubset(dataset, train_subset.indices)
-    val_dataset = ValSubset(dataset, valid_subset.indices)
+    logger.info(f"Train/Validation split: {len(train_dataset)}/{len(val_dataset)} samples")
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -186,7 +189,7 @@ def train(
         log_dir=tblog_dir,
         dataloader=val_loader,
         device=device,
-        crop_size=train_config.cropsize,
+        crop_size=train_config.crop_size,
         destandardize_img_fn=destandardize_img_fn,
         max_outputs=4,
     )
@@ -194,7 +197,7 @@ def train(
         logger.info(f"TensorBoard logging enabled: {tblog_dir}")
 
     if train_config.tensorboard:
-        sample_input = torch.randn(1, 3, train_config.cropsize, train_config.cropsize).to(device)
+        sample_input = torch.randn(1, 3, train_config.crop_size, train_config.crop_size).to(device)
         tb_logger.log_model_graph(models, sample_input)
         logger.info("Model graph logged to TensorBoard.")
 
@@ -252,31 +255,32 @@ def train(
         logger.info("TensorBoard logger closed.")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Command-line interface for training the denoiser model."""
     parser = argparse.ArgumentParser(description="Train a denoiser model.")
-    parser.add_argument("--train_data_path", type=Path, required=True, help="Path to the training data.")
-    parser.add_argument("--valid_data_path", type=Path, default=None, help="Path to the validation data (optional).")
+    parser.add_argument("--train-data-path", type=Path, required=True, help="Path to the training data.")
+    parser.add_argument("--val-data-path", type=Path, default=None, help="Path to the validation data (optional).")
 
     parser.add_argument(
-        "--clean_img_keyword", type=str, default=None, help="Keyword to identify clean images in filename."
+        "--clean-img-keyword", type=str, default=None, help="Keyword to identify clean images in filename."
     )
     parser.add_argument(
-        "--noisy_img_keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
+        "--noisy-img-keyword", type=str, default=None, help="Keyword to identify noisy images in filename."
     )
     parser.add_argument(
-        "--detector_keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
+        "--detector-keywords", type=str, nargs="*", default=None, help="List of detector keywords (optional)."
     )
-    parser.add_argument("--output_dir", type=Path, default="./results", help="Directory to save results.")
-    parser.add_argument("--log_dir", type=Path, default="logs", help="Directory to save logs.")
-    parser.add_argument("--model_name", type=str, default=None, help="Model architecture to use.")
-    parser.add_argument("--batch_size", type=int, default=4, help="Training batch size.")
-    parser.add_argument("--cropsize", type=int, default=None, help="Crop size for training images.")
-    parser.add_argument("--noise_sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
-    parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate for optimizer.")
+    parser.add_argument("--output-dir", type=Path, default="./results", help="Directory to save results.")
+    parser.add_argument("--log-dir", type=Path, default="logs", help="Directory to save logs.")
+    parser.add_argument("--model-name", type=str, default=None, help="Model architecture to use.")
+    parser.add_argument("--batch-size", type=int, default=4, help="Training batch size.")
+    parser.add_argument("--crop-size", type=int, default=None, help="Crop size for training images.")
+    parser.add_argument("--noise-sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
+    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate for optimizer.")
     parser.add_argument("--iteration", type=int, default=1000, help="Number of training iterations.")
     parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
     parser.add_argument("--limit", type=int, default=None, help="Limit on number of training samples (optional).")
-    parser.add_argument("--pretrain_model_path", type=Path, default=None, help="Path to the pre-trained model.")
+    parser.add_argument("--pretrain-model-path", type=Path, default=None, help="Path to the pre-trained model.")
     parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging.")
     parser.add_argument(
         "--verbose", type=str, choices=["debug", "info", "error"], default="info", help="Logging verbosity level."
@@ -300,7 +304,7 @@ if __name__ == "__main__":
     # Create training configuration
     config = TrainConfig.from_optional_kwargs(
         batch_size=args.pop("batch_size"),
-        cropsize=args.pop("cropsize"),
+        crop_size=args.pop("crop_size"),
         model_name=args.pop("model_name"),
         noise_sigma=args.pop("noise_sigma"),
         learning_rate=args.pop("learning_rate"),
@@ -320,3 +324,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Training failed with error: {e}")
         raise
+
+
+if __name__ == "__main__":
+    main()

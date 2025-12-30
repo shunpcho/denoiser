@@ -67,7 +67,6 @@ class UNet(nn.Module):
             features_only=True,
             in_chans=in_channels,
             out_indices=list(range(encoder_depth)),
-            dynamic_img_size=True,
         )
 
         # Get encoder output channels for each stage

@@ -12,14 +12,18 @@ dependencies = [
     "torch>=2.8.0",
     "torchvision>=0.23.0",
     "tqdm>=4.67.1",
+    "vit_unet>=0.1.0",
 ]
 
 [project.scripts]
-tb-export = "denoiser.tb_event_exporter:main"
+train = "denoiser.train:main"
 
 [dependency-groups]
 dev = ["ipython>=9.5.0", "pyright>=1.1.405", "ruff>=0.13.1"]
 test = ["pytest>=8.0.0", "pytest-cov>=6.0.0", "pytest-mock>=3.14.0"]
+
+[tool.uv.sources]
+vit_unet = { git = "https://github.com/shunpcho/vit-unet.git" }
 
 [build-system]
 requires = ["hatchling"]

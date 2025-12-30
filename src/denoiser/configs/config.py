@@ -22,7 +22,7 @@ class PairingKeyWords:
 
 class _TrainConfigKwargs(TypedDict, total=False):
     batch_size: int
-    cropsize: int
+    crop_size: int
     model_name: str
     noise_sigma: float
     learning_rate: float
@@ -40,7 +40,7 @@ class _TrainConfigKwargs(TypedDict, total=False):
 class TrainConfig:
     # Required fields (no defaults) must come first
     batch_size: int
-    cropsize: int
+    crop_size: int
     learning_rate: float
     iteration: int
     interval: int
