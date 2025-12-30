@@ -126,6 +126,7 @@ def train(
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
+        data_augmentation_fn=augmentation_fn,  # type: ignore[arg-type]
         mode="val",
         noise_sigma=noise_sigma,
         limit=limit,
