@@ -207,6 +207,7 @@ dependencies = [
     { name = "torch" },
     { name = "torchvision" },
     { name = "tqdm" },
+    { name = "vit-unet" },
 ]
 
 [package.dev-dependencies]
@@ -230,6 +231,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.8.0" },
     { name = "torchvision", specifier = ">=0.23.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "vit-unet", git = "https://github.com/shunpcho/vit-unet.git" },
 ]
 
 [package.metadata.requires-dev]
@@ -1485,6 +1487,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/15/22/9ee70a2574a4f4599
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/c2/fe1e52489ae3122415c51f387e221dd0773709bad6c6cdaa599e8a2c5185/urllib3-2.5.0-py3-none-any.whl", hash = "sha256:e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc", size = 129795, upload-time = "2025-06-18T14:07:40.39Z" },
 ]
+
+[[package]]
+name = "vit-unet"
+version = "0.1.0"
+source = { git = "https://github.com/shunpcho/vit-unet.git#f5546b2c735ccdb85f1bc1cef979792c296daf11" }
 
 [[package]]
 name = "wcwidth"
