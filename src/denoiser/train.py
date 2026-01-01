@@ -145,7 +145,7 @@ def train(
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
-        batch_size=1,
+        batch_size=train_config.batch_size,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
@@ -167,7 +167,10 @@ def train(
         models = load_model_checkpoint(models, pretrain_model_path, device)
 
     optimizer = optim.Adam(models.parameters(), lr=train_config.learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    # Use CosineAnnealingLR for smooth learning rate decay
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=train_config.iteration, eta_min=train_config.learning_rate / 1000
+    )
 
     # Debug: Check data types and shapes
     sample_batch = next(iter(val_loader))
@@ -245,7 +248,9 @@ def train(
             logger.info(f"Validation prediction images saved to {pred_images_dir}")
 
             models.train()
-            scheduler.step()
+
+        # Step scheduler every iteration for smooth decay
+        scheduler.step()
 
     total_time = time.time()
     logger.info(f"Training completed in {(total_time - train_start_time) / 60:.2f} minutes.")
