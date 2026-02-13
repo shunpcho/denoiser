@@ -3,10 +3,10 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn.functional
 from torch.utils.data import DataLoader
 
 from denoiser.configs.config import TrainConfig
+from denoiser.utils.calculate_loss import calculate_psnr, calculate_ssim
 from denoiser.utils.loss.loss_f import LossFunction
 
 
@@ -104,6 +104,7 @@ class TrainTrainer(Trainer):
         dataloader = self.train_dataloader if train else self.val_dataloader
         steps = len(dataloader)
         step_losses: dict[str, float] = {}
+        loss_fn = LossFunction(loss_type=self.loss_type)
 
         step_time: float | None = None
         fetch_time: float | None = None
@@ -118,16 +119,20 @@ class TrainTrainer(Trainer):
                 self.optimizer.zero_grad()
 
             outputs = self.models(noisy)
-            loss_fn = LossFunction(loss_type=self.loss_type)
-            loss = loss_fn(outputs, clean)
+            loss_components = loss_fn.compute_components(outputs, clean)
+            loss = loss_components["Loss"]
 
             if train:
                 loss.backward()
                 self.optimizer.step()
 
-            step_losses["Loss"] = step_losses.get("Loss", 0) + loss.item()
-            # step_losses["SSIM"] = step_losses.get("SSIM", 0) + self._calculate_ssim(outputs, clean).item()
-            # step_losses["PSNR"] = step_losses.get("PSNR", 0) + 10 * torch.log10(1 / loss).item()
+            for name, value in loss_components.items():
+                step_losses[name] = step_losses.get(name, 0.0) + value.item()
+            with torch.no_grad():
+                psnr = calculate_psnr(outputs, clean)
+                ssim = calculate_ssim(outputs, clean)
+            step_losses["PSNR"] = step_losses.get("PSNR", 0.0) + psnr
+            step_losses["SSIM"] = step_losses.get("SSIM", 0.0) + ssim
 
             previous_step_start_time = step_start_time
             current_time = time.perf_counter()

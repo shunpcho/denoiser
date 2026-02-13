@@ -218,8 +218,7 @@ def train(
             val_losses = trainer.val_step()
             val_loss = val_losses["Loss"]
 
-            # Extract train loss value (it's a dict now)
-            train_loss_value = train_loss["Loss"] if isinstance(train_loss, dict) else train_loss
+            train_loss_value = train_loss["Loss"]
 
             logger.info(f"Iteration {iteration}: Train Loss={train_loss_value:.4f}, Val Loss={val_loss:.4f}")
 
@@ -229,8 +228,26 @@ def train(
                 logger.info(f"New best model saved at iteration {iteration}")
 
             tb_logger.log_training_metrics(
-                train_loss=train_loss_value, val_loss=val_loss, learning_rate=scheduler.get_last_lr()[0], step=iteration
+                train_loss=train_loss_value,
+                val_loss=val_loss,
+                learning_rate=float(scheduler.get_last_lr()[0]),
+                step=iteration,
             )
+            if "PSNR" in train_loss:
+                tb_logger.log_scalar("Train/PSNR", train_loss["PSNR"], iteration)
+            if "SSIM" in train_loss:
+                tb_logger.log_scalar("Train/SSIM", train_loss["SSIM"], iteration)
+            if "PSNR" in val_losses:
+                tb_logger.log_scalar("Val/PSNR", val_losses["PSNR"], iteration)
+            if "SSIM" in val_losses:
+                tb_logger.log_scalar("Val/SSIM", val_losses["SSIM"], iteration)
+
+            for name, value in train_loss.items():
+                if name.startswith("ESFL_"):
+                    tb_logger.log_scalar(f"Train/{name}", value, iteration)
+            for name, value in val_losses.items():
+                if name.startswith("ESFL_"):
+                    tb_logger.log_scalar(f"Val/{name}", value, iteration)
 
             tb_logger.log_images(models, step=iteration, tag_prefix="Sample")
 
