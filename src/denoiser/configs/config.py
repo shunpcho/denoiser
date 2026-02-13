@@ -26,6 +26,7 @@ class _TrainConfigKwargs(TypedDict, total=False):
     model_name: str
     noise_sigma: float
     learning_rate: float
+    loss_type: str
     iteration: int
     interval: int
     pretrain_model_path: str | None
@@ -42,6 +43,7 @@ class TrainConfig:
     batch_size: int
     crop_size: int
     learning_rate: float
+    loss_type: str
     iteration: int
     interval: int
 

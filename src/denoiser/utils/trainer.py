@@ -7,6 +7,7 @@ import torch.nn.functional
 from torch.utils.data import DataLoader
 
 from denoiser.configs.config import TrainConfig
+from denoiser.utils.loss.loss_f import LossFunction
 
 
 class Trainer:
@@ -75,7 +76,7 @@ class TrainTrainer(Trainer):
         super().__init__(device=train_config.device)
         self.models = models
         self.optimizer = optimizers
-        self.train_configs = train_config
+        self.loss_type = train_config.loss_type
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.device = train_config.device
@@ -117,7 +118,8 @@ class TrainTrainer(Trainer):
                 self.optimizer.zero_grad()
 
             outputs = self.models(noisy)
-            loss = torch.nn.functional.mse_loss(outputs, clean)
+            loss_fn = LossFunction(loss_type=self.loss_type)
+            loss = loss_fn(outputs, clean)
 
             if train:
                 loss.backward()

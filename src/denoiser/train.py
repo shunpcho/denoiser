@@ -282,6 +282,7 @@ def main() -> None:
     parser.add_argument("--crop-size", type=int, default=None, help="Crop size for training images.")
     parser.add_argument("--noise-sigma", type=float, default=None, help="Standard deviation of Gaussian noise.")
     parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate for optimizer.")
+    parser.add_argument("--loss-type", type=str, default="mse", help="Type of loss function to use.")
     parser.add_argument("--iteration", type=int, default=1000, help="Number of training iterations.")
     parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
     parser.add_argument("--limit", type=int, default=None, help="Limit on number of training samples (optional).")
@@ -313,6 +314,7 @@ def main() -> None:
         model_name=args.pop("model_name"),
         noise_sigma=args.pop("noise_sigma"),
         learning_rate=args.pop("learning_rate"),
+        loss_type=args.pop("loss_type"),
         iteration=args.pop("iteration"),
         interval=args.pop("interval"),
         pretrain_model_path=args.pop("pretrain_model_path"),
