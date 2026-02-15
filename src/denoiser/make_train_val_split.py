@@ -90,24 +90,34 @@ def main() -> None:
     args = parser.parse_args()
     args = vars(args)
 
-    args["pairing_keywords"] = (
+    clean_img_keyword = args.pop("clean_img_keyword")
+    noisy_img_keyword = args.pop("noisy_img_keyword")
+    detector_keywords = args.pop("detector_keywords")
+
+    pairing_keywords = (
         PairingKeyWords(
-            clean=args.pop("clean_img_keyword"),
-            noisy=args.pop("noisy_img_keyword"),
-            detector=args.pop("detector_keywords") or None,
+            clean=clean_img_keyword,
+            noisy=noisy_img_keyword,
+            detector=detector_keywords or None,
         )
-        if args.get("clean_img_keyword")
+        if clean_img_keyword
         else None
     )
-    if args.get("train_val_path"):
-        args["train_val"] = TrainValSplitKwargs(
-            train_path=args["train_val_path"][0],
-            val_path=args["train_val_path"][1],
-        )
-    elif args.get("train_ratio") is not None:
-        args["train_val"] = args.pop("train_ratio")
+    train_val_path = args.pop("train_val_path")
+    train_ratio = args.pop("train_ratio")
 
-    split_train_val(**args)
+    if train_val_path:
+        train_val = TrainValSplitKwargs(
+            train_path=train_val_path[0],
+            val_path=train_val_path[1],
+        )
+    elif train_ratio is not None:
+        train_val = train_ratio
+    else:
+        msg = "Either --train-val-path or --train-ratio must be provided."
+        raise ValueError(msg)
+    print(args)
+    split_train_val(**args, train_val=train_val, img_read_keywords=pairing_keywords)
 
 
 if __name__ == "__main__":
