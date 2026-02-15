@@ -169,7 +169,7 @@ def train(
     optimizer = optim.Adam(models.parameters(), lr=train_config.learning_rate)
     # Use CosineAnnealingLR for smooth learning rate decay
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=train_config.iteration, eta_min=train_config.learning_rate / 1000
+        optimizer, T_max=train_config.iteration, eta_min=train_config.learning_rate / 100
     )
 
     # Debug: Check data types and shapes
@@ -312,13 +312,17 @@ def main() -> None:
     args = parser.parse_args()
     args = vars(args)
 
+    clean_img_keyword = args.pop("clean_img_keyword")
+    noisy_img_keyword = args.pop("noisy_img_keyword")
+    detector_keywords = args.pop("detector_keywords")
+
     pairing_keywords = (
         PairingKeyWords(
-            clean=args.pop("clean_img_keyword"),
-            noisy=args.pop("noisy_img_keyword"),
-            detector=args.pop("detector_keywords") or None,
+            clean=clean_img_keyword,
+            noisy=noisy_img_keyword,
+            detector=detector_keywords or None,
         )
-        if args.get("clean_img_keyword")
+        if clean_img_keyword
         else None
     )
 
