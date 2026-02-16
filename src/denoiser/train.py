@@ -70,6 +70,9 @@ def train(
     logger.info("Created output and log directories.")
 
     device = train_config.device
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        torch.set_float32_matmul_precision("high")
 
     img_channels = (
         3
@@ -140,7 +143,8 @@ def train(
         batch_size=train_config.batch_size,
         shuffle=True,
         num_workers=4,
-        pin_memory=True,
+        pin_memory=device.type == "cuda",
+        persistent_workers=True,
         collate_fn=collate_fn,
     )
     val_loader = torch.utils.data.DataLoader(
@@ -148,7 +152,8 @@ def train(
         batch_size=train_config.batch_size,
         shuffle=False,
         num_workers=4,
-        pin_memory=True,
+        pin_memory=device.type == "cuda",
+        persistent_workers=True,
         collate_fn=collate_fn,
     )
 

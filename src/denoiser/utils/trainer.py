@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 import torch
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
 from denoiser.configs.config import TrainConfig
@@ -80,6 +81,8 @@ class TrainTrainer(Trainer):
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.device = train_config.device
+        self.use_amp = self.device.type == "cuda"
+        self.grad_scaler = GradScaler(enabled=self.use_amp)
 
     def save_model(self, path: Path | str) -> None:
         """Save the model state dict to the specified path."""
@@ -104,7 +107,7 @@ class TrainTrainer(Trainer):
         dataloader = self.train_dataloader if train else self.val_dataloader
         steps = len(dataloader)
         step_losses: dict[str, float] = {}
-        loss_fn = LossFunction(loss_type=self.loss_type)
+        loss_fn = LossFunction(loss_type=self.loss_type).to(self.device)
 
         step_time: float | None = None
         fetch_time: float | None = None
@@ -116,15 +119,21 @@ class TrainTrainer(Trainer):
             data_loading_finished_time = time.perf_counter()
 
             if train:
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad(set_to_none=True)
 
-            outputs = self.models(noisy)
-            loss_components = loss_fn.compute_components(outputs, clean)
+            with autocast(enabled=self.use_amp):
+                outputs = self.models(noisy)
+                loss_components = loss_fn.compute_components(outputs, clean)
             loss = loss_components["Loss"]
 
             if train:
-                loss.backward()
-                self.optimizer.step()
+                if self.use_amp:
+                    self.grad_scaler.scale(loss).backward()
+                    self.grad_scaler.step(self.optimizer)
+                    self.grad_scaler.update()
+                else:
+                    loss.backward()
+                    self.optimizer.step()
 
             for name, value in loss_components.items():
                 step_losses[name] = step_losses.get(name, 0.0) + value.item()
