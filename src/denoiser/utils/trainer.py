@@ -3,11 +3,11 @@ import time
 from pathlib import Path
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 
 from denoiser.configs.config import TrainConfig
-from denoiser.utils.calculate_loss import calculate_psnr, calculate_ssim
+from denoiser.utils.calculate_loss import calculate_mse, calculate_psnr, calculate_ssim
 from denoiser.utils.loss.loss_f import LossFunction
 
 
@@ -138,8 +138,10 @@ class TrainTrainer(Trainer):
             for name, value in loss_components.items():
                 step_losses[name] = step_losses.get(name, 0.0) + value.item()
             with torch.no_grad():
+                mse = calculate_mse(outputs, clean)
                 psnr = calculate_psnr(outputs, clean)
                 ssim = calculate_ssim(outputs, clean)
+            step_losses["MSE"] = step_losses.get("MSE", 0.0) + mse
             step_losses["PSNR"] = step_losses.get("PSNR", 0.0) + psnr
             step_losses["SSIM"] = step_losses.get("SSIM", 0.0) + ssim
 

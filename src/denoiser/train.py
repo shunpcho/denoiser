@@ -238,6 +238,10 @@ def train(
                 learning_rate=float(scheduler.get_last_lr()[0]),
                 step=iteration,
             )
+            if "MSE" in train_loss:
+                tb_logger.log_scalar("Train/MSE", train_loss["MSE"], iteration)
+            if "MSE" in val_losses:
+                tb_logger.log_scalar("Val/MSE", val_losses["MSE"], iteration)
             if "PSNR" in train_loss:
                 tb_logger.log_scalar("Train/PSNR", train_loss["PSNR"], iteration)
             if "SSIM" in train_loss:
