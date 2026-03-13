@@ -84,25 +84,24 @@ data/<dataset name>
 
 The script uses a fixed random seed (42) for reproducible splits.
 
-
 ### Training
 
 Example command for training with sample data:
 
 ```bash
 python src/denoiser/train.py \
-    --train_data_path "data/CC15" \
-    --clean_img_keyword "_mean" \
-    --noisy_img_keyword "_real" \
-    --batch_size 4 \
-    --cropsize 256 \
-    --learning_rate 0.0001 \
-    --iteration 300 \
-    --interval 50 \
-    --output_dir "./results" \
-    --log_dir "logs" \
-    --tensorboard True \
-    --verbose "info"
+  --train-data-path "data/CC15" \
+  --clean-img-keyword "_mean" \
+  --noisy-img-keyword "_real" \
+  --batch-size 4 \
+  --crop-size 256 \
+  --learning-rate 0.0001 \
+  --iteration 300 \
+  --interval 50 \
+  --output-dir "./results" \
+  --log-dir "logs" \
+  --tensorboard \
+  --verbose "info"
 
 ```
 
@@ -111,20 +110,24 @@ python src/denoiser/train.py \
 
 | Args                    | Type  | Default     | Detail                                       |
 | ----------------------- | ----- | ----------- | -------------------------------------------- |
-| `--train_data_path`     | Path  | Required    | Path to the training data directory          |
-| `--valid_data_path`     | Path  | None        | Path to the validation data (optional)       |
-| `--clean_img_keyword`   | str   | None        | Keyword to identify clean images in filename |
-| `--noisy_img_keyword`   | str   | None        | Keyword to identify noisy images in filename |
-| `--output_dir`          | Path  | "./results" | Directory to save results                    |
-| `--log_dir`             | Path  | "logs"      | Directory to save logs                       |
-| `--batch_size`          | int   | 4           | Training batch size                          |
-| `--cropsize`            | int   | None        | Crop size for training images                |
-| `--noise_sigma`         | float | None        | Standard deviation of Gaussian noise         |
-| `--learning_rate`       | float | 1e-4        | Learning rate for optimizer                  |
+| `--train-data-path`     | Path  | Required    | Path to the training data directory          |
+| `--val-data-path`       | Path  | None        | Path to the validation data (optional)       |
+| `--clean-img-keyword`   | str   | None        | Keyword to identify clean images in filename |
+| `--noisy-img-keyword`   | str   | None        | Keyword to identify noisy images in filename |
+| `--detector-keywords`   | str[] | None        | Detector keywords (space-separated list)     |
+| `--output-dir`          | Path  | "./results" | Directory to save results                    |
+| `--log-dir`             | Path  | "logs"      | Directory to save logs                       |
+| `--model-name`          | str   | None        | Model architecture to use                    |
+| `--batch-size`          | int   | 4           | Training batch size                          |
+| `--crop-size`           | int   | None        | Crop size for training images                |
+| `--noise-sigma`         | float | None        | Standard deviation of Gaussian noise         |
+| `--learning-rate`       | float | 1e-4        | Learning rate for optimizer                  |
+| `--loss-type`           | str   | "mse"       | Type of loss function                        |
 | `--iteration`           | int   | 1000        | Number of training iterations                |
 | `--interval`            | int   | 100         | Validation interval                          |
-| `--pretrain_model_path` | Path  | None        | Path to the pre-trained model                |
-| `--tensorboard`         | bool  | True        | Enable TensorBoard logging                   |
+| `--limit`               | int   | None        | Limit on number of training samples          |
+| `--pretrain-model-path` | Path  | None        | Path to the pre-trained model                |
+| `--tensorboard`         | flag  | True        | Enable TensorBoard logging                   |
 | `--verbose`             | str   | "info"      | Logging verbosity level (debug/info/error)   |
 
 </details>
