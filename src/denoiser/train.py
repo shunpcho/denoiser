@@ -22,6 +22,7 @@ from denoiser.data.data_transformations import (
     standardize_img,
 )
 from denoiser.models.build_model import create_model, load_model_checkpoint
+from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITH_META
 from denoiser.utils.data_utils import collate_fn
 from denoiser.utils.get_logger import create_logger
 from denoiser.utils.tensorboard_log import TensorBoard
@@ -29,7 +30,7 @@ from denoiser.utils.trainer import TrainTrainer
 from denoiser.utils.vis_img import save_validation_predictions_stitched
 
 
-def train(
+def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
     train_data_path: Path,
     train_config: TrainConfig,
     val_data_path: Path | None = None,
@@ -178,7 +179,7 @@ def train(
 
     # Debug: Check data types and shapes
     sample_batch = next(iter(val_loader))
-    if isinstance(sample_batch, (tuple, list)) and len(sample_batch) == 3:
+    if isinstance(sample_batch, (tuple, list)) and len(sample_batch) == BATCH_ENTRY_LENGTH_WITH_META:
         clean_sample, _, _ = sample_batch
     else:
         clean_sample, _ = sample_batch
