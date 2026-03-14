@@ -77,8 +77,16 @@ class TrainTrainer(Trainer):
         models: torch.nn.Module,
         optimizers: torch.optim.Optimizer,
         train_config: TrainConfig,
-        train_dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
-        val_dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
+        train_dataloader: DataLoader[
+            tuple[npt.NDArray[np.uint8] | npt.NDArray[np.float32], npt.NDArray[np.uint8] | npt.NDArray[np.float32]]
+        ],
+        val_dataloader: DataLoader[
+            tuple[
+                npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+                npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+                IndexMapEntry,
+            ]
+        ],
     ) -> None:
         super().__init__(device=train_config.device)
         self.models = models

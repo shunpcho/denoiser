@@ -40,7 +40,13 @@ class TensorBoard:
         self,
         log_dir: Path | str,
         dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]]
-        | DataLoader[tuple[torch.Tensor, torch.Tensor, IndexMapEntry]],
+        | DataLoader[
+            tuple[
+                npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+                npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+                IndexMapEntry,
+            ]
+        ],
         device: torch.device,
         crop_size: int | tuple[int, int],
         destandardize_img_fn: Callable[[npt.NDArray[np.float32] | torch.Tensor], npt.NDArray[np.uint8]],

@@ -39,8 +39,7 @@ class PairedDataset(
         data_paths: Path | list[Path],
         data_loading_fn: Callable[[Path], npt.NDArray[np.uint8]],
         img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
-        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]
-        | Callable[[Path], npt.NDArray[np.uint8]],
+        pairing_fn: Callable[[Path], npt.NDArray[np.uint8]],
         data_augmentation_fn: Callable[
             [npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]
         ]
@@ -69,7 +68,7 @@ class PairedDataset(
     ) -> tuple[npt.NDArray[np.uint8] | npt.NDArray[np.float32], npt.NDArray[np.uint8] | npt.NDArray[np.float32]]:
         clean_path = self.img_paths[idx % len(self.img_paths)]
         img_clean = self.data_loading_fn(clean_path)
-        img_noisy = self.pairing_fn(clean_path, img_clean)
+        img_noisy = self.pairing_fn(clean_path)
 
         if self.data_augmentation_fn is not None:
             img_clean, img_noisy = self.data_augmentation_fn(img_clean, img_noisy)
@@ -127,8 +126,7 @@ class TiledPairedDataset(
         data_paths: Path | list[Path],
         data_loading_fn: Callable[[Path], npt.NDArray[np.uint8]],
         img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
-        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]
-        | Callable[[Path], npt.NDArray[np.uint8]],
+        pairing_fn: Callable[[Path], npt.NDArray[np.uint8]],
         tile_size: int | tuple[int, int],
         mode: Literal["val"] = "val",
         limit: int | None = None,
@@ -204,7 +202,7 @@ class TiledPairedDataset(
         self, clean_path: Path, tile_y: int, tile_x: int, tile_h: int, tile_w: int
     ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         clean_u8 = self.data_loading_fn(clean_path)
-        noisy_u8 = self.pairing_fn(clean_path, clean_u8)
+        noisy_u8 = self.pairing_fn(clean_path)
 
         # pad both the same way (reflect)
         clean_pad, _, _ = pad_to_multiple_reflect(clean_u8, tile_h, tile_w)

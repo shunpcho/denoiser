@@ -97,13 +97,9 @@ def load_img_clean(pairing_words: PairingKeyWords | None) -> Callable[[Path], np
 
 def _add_gaussian_noise_factory(
     noise_sigma: float,
-) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
-    def add_gaussian_noise(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
-        if clean_img is None:
-            img = Image.open(path).convert("RGB")
-            img_array = np.asarray(img).astype(np.uint8)
-        else:
-            img_array = clean_img
+) -> Callable[[Path], npt.NDArray[np.uint8]]:
+    def add_gaussian_noise(path: Path) -> npt.NDArray[np.uint8]:
+        img_array = load_img(path)
         rng = np.random.default_rng()
         noise = rng.normal(0, noise_sigma, img_array.shape).astype(np.int16)
         noisy_img = img_array.astype(np.int16) + noise
@@ -155,7 +151,7 @@ def _load_noisy_single_detector_factory(
 # Pairing functions
 def pairing_clean_noisy(
     pairing_words: PairingKeyWords | None, noise_sigma: float
-) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]] | Callable[[Path], npt.NDArray[np.uint8]]:
+) -> Callable[[Path], npt.NDArray[np.uint8]]:
     """Create function to load noisy images from clean image paths."""
     if pairing_words is None:
         return _add_gaussian_noise_factory(noise_sigma)

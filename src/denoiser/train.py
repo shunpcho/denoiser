@@ -179,7 +179,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
 
     # Debug: Check data types and shapes
     sample_batch = next(iter(val_loader))
-    if isinstance(sample_batch, (tuple, list)) and len(sample_batch) == BATCH_ENTRY_LENGTH_WITH_META:
+    if len(sample_batch) == BATCH_ENTRY_LENGTH_WITH_META:
         clean_sample, _, _ = sample_batch
     else:
         clean_sample, _ = sample_batch

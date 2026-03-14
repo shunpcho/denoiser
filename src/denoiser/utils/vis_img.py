@@ -159,7 +159,14 @@ def process_batch(
 
 def save_validation_predictions_stitched(
     model: torch.nn.Module,
-    val_loader: DataLoader[tuple[torch.Tensor, torch.Tensor, list[IndexMapEntry]]],
+    val_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]]
+    | DataLoader[
+        tuple[
+            npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+            npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+            IndexMapEntry,
+        ]
+    ],
     device: torch.device,
     destandardize_fn: Callable[[torch.Tensor | npt.NDArray[np.float32]], npt.NDArray[np.uint8]],
     save_dir: Path,
