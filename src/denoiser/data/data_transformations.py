@@ -112,9 +112,7 @@ def _add_gaussian_noise_factory(
     return add_gaussian_noise
 
 
-def _load_noisy_rgb_factory(
-    clean_kw: str, noisy_kw: str
-) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
+def _load_noisy_rgb_factory(clean_kw: str, noisy_kw: str) -> Callable[[Path], npt.NDArray[np.uint8]]:
     def load_noisy_rgb(path: Path) -> npt.NDArray[np.uint8]:
         noisy_path = Path(str(path).replace(clean_kw, noisy_kw))
         img = Image.open(noisy_path).convert("RGB")
@@ -126,7 +124,7 @@ def _load_noisy_rgb_factory(
 
 def _load_noisy_dual_detector_factory(
     clean_kw: str, noisy_kw: str, det0: str, det1: str
-) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
+) -> Callable[[Path], npt.NDArray[np.uint8]]:
     def load_noisy_dual_detector(path: Path) -> npt.NDArray[np.uint8]:
         noisy_path = Path(str(path).replace(clean_kw, noisy_kw))
         detect_a_path = noisy_path
@@ -141,9 +139,12 @@ def _load_noisy_dual_detector_factory(
 
 
 def _load_noisy_single_detector_factory(
-    clean_kw: str, noisy_kw: str
+    clean_kw: str, noisy_kw: str | None = None
 ) -> Callable[[Path], npt.NDArray[np.uint8]]:
     def load_noisy_single_detector(path: Path) -> npt.NDArray[np.uint8]:
+        if noisy_kw is None:
+            msg = "Add noise function was not implemented."
+            raise NotImplementedError(msg)
         noisy_path = Path(str(path).replace(clean_kw, noisy_kw))
         img_detect = load_img_gray(noisy_path)
         return np.expand_dims(img_detect, axis=-1)
@@ -154,13 +155,13 @@ def _load_noisy_single_detector_factory(
 # Pairing functions
 def pairing_clean_noisy(
     pairing_words: PairingKeyWords | None, noise_sigma: float
-) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
+) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]] | Callable[[Path], npt.NDArray[np.uint8]]:
     """Create function to load noisy images from clean image paths."""
     if pairing_words is None:
         return _add_gaussian_noise_factory(noise_sigma)
 
     # prefer explicit detector handling when present
-    if pairing_words.detector is not None:
+    if pairing_words.detector is not None and pairing_words.noisy is not None:
         det_len = len(pairing_words.detector)
         if det_len >= MIN_DETECTOR_COUNT:
             det0 = pairing_words.detector[0]
@@ -173,8 +174,8 @@ def pairing_clean_noisy(
     if pairing_words.noisy is not None and pairing_words.detector is None:
         return _load_noisy_rgb_factory(pairing_words.clean, pairing_words.noisy)
 
-    # fallback to RGB loader
-    return _load_noisy_rgb_factory(pairing_words.clean, pairing_words.noisy)
+    # fallback
+    return _load_noisy_single_detector_factory(pairing_words.clean, pairing_words.noisy)
 
 
 def compose_transformations(

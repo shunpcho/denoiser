@@ -1,5 +1,7 @@
 from typing import TypedDict
 
+import torch
+
 # Shared constants and small aliases used across the denoiser package.
 # IMAGE_DIMENSIONS_3D: number of array dimensions for color images (H, W, C)
 IMAGE_DIMENSIONS_3D: int = 3
@@ -29,3 +31,11 @@ class IndexMapEntry(TypedDict):
     pad_h: int
     pad_w: int
     image_id: str
+
+
+class CanvasBufferEntry(TypedDict):
+    canvas: torch.Tensor
+    orig_h: int
+    orig_w: int
+    count: int
+    expected: int | None

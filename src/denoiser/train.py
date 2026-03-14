@@ -101,7 +101,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
 
     # Create augmentation functions
     crop_fn = random_crop(crop_size)
-    augmentation_fn = compose_transformations([crop_fn])  # type: ignore[arg-type]
+    augmentation_fn = compose_transformations([crop_fn])
 
     logger.info(f"Clean image loader configured: {clean_img_loader.__name__}")
     logger.info(f"Noisy image loader configured: {noisy_img_loader.__name__}")

@@ -23,7 +23,7 @@ try:
 except ImportError:
     _SummaryWriter = None
 
-from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITHOUT_META
+from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITHOUT_META, IndexMapEntry
 
 
 class InvalidBatchTypeError(TypeError):
@@ -39,7 +39,8 @@ class TensorBoard:
     def __init__(
         self,
         log_dir: Path | str,
-        dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
+        dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]]
+        | DataLoader[tuple[torch.Tensor, torch.Tensor, IndexMapEntry]],
         device: torch.device,
         crop_size: int | tuple[int, int],
         destandardize_img_fn: Callable[[npt.NDArray[np.float32] | torch.Tensor], npt.NDArray[np.uint8]],
@@ -171,15 +172,18 @@ class TensorBoard:
             try:
                 # Get a batch of data from the dataloader
                 batch = next(iter(self.dataloader))
+                # Explicitly annotate batch type for type checkers
+                batch: tuple[torch.Tensor, ...] | list[torch.Tensor]
                 # Handle dataloaders that return (clean, noisy) or (clean, noisy, metas)
-                if isinstance(batch, (tuple, list)):
-                    if len(batch) >= BATCH_ENTRY_LENGTH_WITHOUT_META:
-                        clean_images = batch[0]
-                        noisy_images = batch[1]
-                    else:
-                        self._raise_invalid_batch_error()
+                if len(batch) >= BATCH_ENTRY_LENGTH_WITHOUT_META:
+                    clean_images = batch[0]
+                    noisy_images = batch[1]
                 else:
-                    msg = f"Unexpected batch type from dataloader: {type(batch)}"
+                    msg = (
+                        f"Batch from dataloader has insufficient length: "
+                        f"expected at least {BATCH_ENTRY_LENGTH_WITHOUT_META}, "
+                        f"got {len(batch)}"
+                    )
                     raise InvalidBatchTypeError(msg)
 
                 # Move to device and limit to max_outputs

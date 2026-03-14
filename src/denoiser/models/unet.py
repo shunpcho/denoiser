@@ -70,8 +70,7 @@ class UNet(nn.Module):
         )
 
         # Get encoder output channels for each stage
-        encoder_channels = self.encoder.feature_info.channels()[:encoder_depth]
-
+        encoder_channels = self.encoder.feature_info.channels()[:encoder_depth]  # pyright: ignore[reportUnknownVariableType, reportCallIssue, reportAttributeAccessIssue]
         # Adjust decoder channels to match encoder depth
         if len(decoder_channels) > encoder_depth:
             decoder_channels = decoder_channels[:encoder_depth]
@@ -85,14 +84,14 @@ class UNet(nn.Module):
         self.upsamples = nn.ModuleList()
 
         # Reverse encoder channels for bottom-up decoding
-        encoder_channels = encoder_channels[::-1]
+        encoder_channels = encoder_channels[::-1]  # pyright: ignore[reportUnknownVariableType]
 
         for i in range(len(decoder_channels)):
-            in_ch = encoder_channels[0] if i == 0 else decoder_channels[i - 1]
-
+            in_ch = encoder_channels[0] if i == 0 else decoder_channels[i - 1]  # pyright: ignore[reportUnknownVariableType]
+            in_ch = int(in_ch)  # pyright: ignore[reportUnknownArgumentType]
             # Skip connection channel
-            skip_ch = encoder_channels[i + 1] if i + 1 < len(encoder_channels) else 0
-
+            skip_ch = encoder_channels[i + 1] if i + 1 < len(encoder_channels) else 0  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+            skip_ch = int(skip_ch)  # pyright: ignore[reportUnknownArgumentType]
             # Total input channels for this block
             total_in_ch = in_ch + skip_ch
 

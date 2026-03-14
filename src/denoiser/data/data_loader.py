@@ -39,7 +39,8 @@ class PairedDataset(
         data_paths: Path | list[Path],
         data_loading_fn: Callable[[Path], npt.NDArray[np.uint8]],
         img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
-        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]],
+        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]
+        | Callable[[Path], npt.NDArray[np.uint8]],
         data_augmentation_fn: Callable[
             [npt.NDArray[np.uint8], npt.NDArray[np.uint8]], tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]
         ]
@@ -101,7 +102,15 @@ def _load_image_paths(data_paths: list[Path] | Path, mode: str) -> list[Path]:
     return img_paths
 
 
-class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], IndexMapEntry]]):
+class TiledPairedDataset(
+    Dataset[
+        tuple[
+            npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+            npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+            IndexMapEntry,
+        ]
+    ]
+):
     """Validation dataset that returns ALL tiles of each image.
 
     - Loads clean/noisy pair
@@ -118,7 +127,8 @@ class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.f
         data_paths: Path | list[Path],
         data_loading_fn: Callable[[Path], npt.NDArray[np.uint8]],
         img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
-        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]],
+        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]
+        | Callable[[Path], npt.NDArray[np.uint8]],
         tile_size: int | tuple[int, int],
         mode: Literal["val"] = "val",
         limit: int | None = None,

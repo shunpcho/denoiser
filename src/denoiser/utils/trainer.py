@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 import torch
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp.autocast_mode import autocast
+from torch.amp.grad_scaler import GradScaler
 from torch.utils.data import DataLoader
 
 from denoiser.configs.config import TrainConfig
@@ -127,7 +128,7 @@ class TrainTrainer(Trainer):
             if train:
                 self.optimizer.zero_grad(set_to_none=True)
 
-            with autocast(enabled=self.use_amp):
+            with autocast("cuda", enabled=self.use_amp):
                 outputs = self.models(noisy)
                 loss_components = loss_fn.compute_components(outputs, clean)
             loss = loss_components["Loss"]
@@ -163,10 +164,12 @@ class TrainTrainer(Trainer):
         batch: tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], IndexMapEntry],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # batch can be (clean, noisy) or (clean, noisy, meta)
-        if isinstance(batch, (tuple, list)) and len(batch) == BATCH_ENTRY_LENGTH_WITH_META:
-            clean, noisy, _meta = batch
+        if len(batch) == BATCH_ENTRY_LENGTH_WITH_META:
+            clean, noisy, _ = batch
         else:
-            clean, noisy = batch
+            clean, noisy = batch[:2]
+        clean = torch.as_tensor(clean)
+        noisy = torch.as_tensor(noisy)
         return clean, noisy
 
     def _backward_and_step(self, loss: torch.Tensor) -> None:

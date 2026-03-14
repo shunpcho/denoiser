@@ -13,10 +13,10 @@ from denoiser.utils.alias import IMAGE_DIMENSIONS_3D
 
 
 def pad_to_multiple_reflect(
-    img: npt.NDArray[np.uint8 | np.float32],
+    img: npt.NDArray[np.uint8],
     tile_h: int,
     tile_w: int,
-) -> tuple[npt.NDArray[np.uint8 | np.float32], int, int]:
+) -> tuple[npt.NDArray[np.uint8], int, int]:
     """Pad right/bottom with reflect so H,W become multiples of tile_h,tile_w.
 
     Args:
