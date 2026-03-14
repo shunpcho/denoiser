@@ -1,0 +1,45 @@
+name: Lint CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "src/**/*.py"
+      - .github/workflows/lint-ci.yaml
+      - pyproject.toml
+      - uv.lock
+  pull_request:
+    paths:
+      - "src/**/*.py"
+      - .github/workflows/lint-ci.yaml
+      - pyproject.toml
+      - uv.lock
+
+jobs:
+  ruff-lint:
+    name: Check code formatting with ruff
+    runs-on: ubuntu-22.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          uv-version: "0.8.3"
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --group lint
+
+      - name: Run ruff
+        run: uv run ruff check src
+
+      - name: Run pyright
+        run: uv run pyright src
