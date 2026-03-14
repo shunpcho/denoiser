@@ -65,3 +65,161 @@ def save_validation_predictions(
 
     except (StopIteration, RuntimeError, OSError) as e:
         print(f"Warning: Failed to save validation predictions: {e}")
+
+
+def _raise_invalid_batch() -> None:
+    msg = "Expected (clean_tiles, noisy_tiles, metas) from tile val_loader"
+    raise ValueError(msg)
+
+
+def _raise_invalid_metas(metas: object) -> None:
+    msg = f"Expected metas as list[dict], got {type(metas)}"
+    raise TypeError(msg)
+
+
+def _save_canvas(
+    image_id: str,
+    canvas: torch.Tensor,
+    orig_h: int,
+    orig_w: int,
+    save_dir: Path,
+    iteration: int,
+    saved: int,
+    destandardize_fn: Callable[[torch.Tensor | npt.NDArray[np.float32]], npt.NDArray[np.uint8]],
+) -> int:
+    stitched = canvas[:, :orig_h, :orig_w]
+    stitched_u8 = destandardize_fn(stitched.detach().cpu())
+    out_img = Image.fromarray(stitched_u8)
+    safe_name = Path(image_id).stem
+    out_img.save(save_dir / f"iter_{iteration:06d}_{safe_name}_pred.png")
+    return saved + 1
+
+
+def process_batch(
+    batch: tuple[torch.Tensor, torch.Tensor, list[dict[str, int | str]]],
+    buffers: dict[str, dict[str, object]],
+    saved: int,
+    max_images: int,
+    model: torch.nn.Module,
+    device: torch.device,
+    save_dir: Path,
+    iteration: int,
+    destandardize_fn: Callable[[torch.Tensor | npt.NDArray[np.float32]], npt.NDArray[np.uint8]],
+) -> int:
+    _, noisy_tiles, metas = batch  # clean_tiles is unused
+    if not isinstance(metas, list):
+        _raise_invalid_metas(metas)
+
+    noisy_tiles = torch.as_tensor(noisy_tiles).to(device)
+    preds = model(noisy_tiles)  # (B, C, tile_h, tile_w)
+
+    for i in range(preds.size(0)):
+        m = metas[i]
+        assert isinstance(m, dict)
+        image_id = str(m["image_id"])
+
+        padded_h = int(m["padded_h"])
+        padded_w = int(m["padded_w"])
+        orig_h = int(m["orig_h"])
+        orig_w = int(m["orig_w"])
+
+        tile_y = int(m["tile_y"])
+        tile_x = int(m["tile_x"])
+        tile_h = int(m["tile_h"])
+        tile_w = int(m["tile_w"])
+
+        if image_id not in buffers:
+            canvas = torch.zeros(
+                (preds[i].shape[0], padded_h, padded_w),
+                dtype=preds[i].dtype,
+                device=preds[i].device,
+            )
+            expected = int(m["tiles_per_image"]) if "tiles_per_image" in m else None
+            buffers[image_id] = {
+                "canvas": canvas,
+                "orig_h": orig_h,
+                "orig_w": orig_w,
+                "count": 0,
+                "expected": expected,
+            }
+
+        canvas = buffers[image_id]["canvas"]
+        assert isinstance(canvas, torch.Tensor)
+
+        canvas[:, tile_y : tile_y + tile_h, tile_x : tile_x + tile_w] = preds[i]
+        buffers[image_id]["count"] = int(buffers[image_id]["count"]) + 1
+
+        expected = buffers[image_id]["expected"]
+        if expected is not None and int(buffers[image_id]["count"]) >= int(expected):
+            canvas = buffers[image_id]["canvas"]
+            assert isinstance(canvas, torch.Tensor)
+            saved = _save_canvas(
+                image_id,
+                canvas,
+                int(buffers[image_id]["orig_h"]),
+                int(buffers[image_id]["orig_w"]),
+                save_dir,
+                iteration,
+                saved,
+                destandardize_fn,
+            )
+            del buffers[image_id]
+            if saved >= max_images:
+                return saved
+    return saved
+
+
+def save_validation_predictions_stitched(
+    model: torch.nn.Module,
+    val_loader: DataLoader[tuple[torch.Tensor, torch.Tensor, list[dict[str, int | str]]]],
+    device: torch.device,
+    destandardize_fn: Callable[[torch.Tensor | npt.NDArray[np.float32]], npt.NDArray[np.uint8]],
+    save_dir: Path,
+    iteration: int,
+    max_images: int = 4,
+) -> None:
+    """Save validation prediction images by stitching tile predictions.
+
+    When the val_loader returns tiles, save the predictions per original image
+    (i.e., stitch the tile predictions and save one prediction image for each original image).
+    """
+    tile_batch_len = 3  # Expected number of items in batch tuple
+
+    try:
+        model.eval()
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        buffers: dict[str, dict[str, object]] = {}
+        saved = 0
+
+        with torch.no_grad():
+            for batch in val_loader:
+                if not (isinstance(batch, (tuple, list)) and len(batch) == tile_batch_len):
+                    _raise_invalid_batch()
+                saved = process_batch(
+                    batch, buffers, saved, max_images, model, device, save_dir, iteration, destandardize_fn
+                )
+                if saved >= max_images:
+                    return
+
+        # Save any remaining incomplete canvases
+        for image_id, b in list(buffers.items()):
+            if saved >= max_images:
+                return
+            canvas = b["canvas"]
+            assert isinstance(canvas, torch.Tensor)
+            orig_h = int(b["orig_h"])
+            orig_w = int(b["orig_w"])
+            saved = _save_canvas(
+                image_id,
+                canvas,
+                orig_h,
+                orig_w,
+                save_dir,
+                iteration,
+                saved,
+                destandardize_fn,
+            )
+
+    except (RuntimeError, OSError, ValueError, StopIteration, TypeError, KeyError) as e:
+        print(f"Warning: Failed to save stitched validation predictions: {e}")

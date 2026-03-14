@@ -9,7 +9,7 @@ import torch
 from PIL import Image
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Callable
 
     from denoiser.configs.config import PairingKeyWords
 
@@ -148,7 +148,9 @@ def pairing_clean_noisy(
         det0 = pairing_words.detector[0]
         det1 = pairing_words.detector[1]
 
-        def load_noisy_dual_detector(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
+        def load_noisy_dual_detector(
+            path: Path, clean_img: npt.NDArray[np.uint8] | None = None
+        ) -> npt.NDArray[np.uint8]:
             """Load dual detector noisy images and concatenate channel-wise."""
             noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
             detect_a_path = noisy_path
@@ -165,7 +167,9 @@ def pairing_clean_noisy(
 
     elif pairing_words.detector is not None and len(pairing_words.detector) == 1:
 
-        def load_noisy_single_detector(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
+        def load_noisy_single_detector(
+            path: Path, clean_img: npt.NDArray[np.uint8] | None = None
+        ) -> npt.NDArray[np.uint8]:
             """Load single detector noisy image as grayscale with channel dimension."""
             noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
             img_detect = load_img_gray(noisy_path)
@@ -349,33 +353,3 @@ def random_crop(
             ]
 
     return rnd_crop
-
-
-def specific_crop(
-    crop_size: int | tuple[int, int],
-) -> Callable[[npt.NDArray[np.uint8]], Generator[npt.NDArray[np.uint8], None, None]]:
-    """Create function to perform specific crop on image.
-
-    Args:
-        crop_size: Size of the crop. If int, creates square crop. If tuple, (height, width).
-
-    Returns:
-        Function to perform specific crop on image.
-    """
-    if isinstance(crop_size, int):
-        crop_h = crop_w = crop_size
-    else:
-        crop_h, crop_w = crop_size
-
-    def spec_crop(img: npt.NDArray[np.uint8]) -> Generator[npt.NDArray[np.uint8], None, None]:
-        h, w = img.shape[:2]
-
-        for crop_y in range(0, h, crop_h):
-            for crop_x in range(0, w, crop_w):
-                if len(img.shape) == IMAGE_DIMENSIONS_3D:  # RGB or multi-channel
-                    img_crop = img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w, :]
-                else:  # Grayscale
-                    img_crop = img[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
-                yield img_crop
-
-    return spec_crop

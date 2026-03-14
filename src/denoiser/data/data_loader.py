@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
@@ -14,7 +14,8 @@ if TYPE_CHECKING:
     from typing import Literal
 
 
-from denoiser.utils.data_utils import hwc_to_chw
+from denoiser.data.tiling import iter_image_tiles, pad_to_multiple_reflect
+from denoiser.utils.data_utils import hwc_to_chw, IMAGE_DIMENSIONS_3D
 
 
 class PairedDataset(
@@ -98,3 +99,112 @@ def _load_image_paths(data_paths: list[Path] | Path, mode: str) -> list[Path]:
         img_paths += [Path(p) for p in files]
 
     return img_paths
+
+
+class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], dict[str, Any]]]):
+    """Validation dataset that returns ALL tiles of each image.
+
+    - Loads clean/noisy pair
+    - Pads (reflect) to multiples of tile_size
+    - Splits into tiles (grid, stride == tile_size)
+    - Returns ONE tile per __getitem__ along with metadata for stitching.
+
+    Returned:
+        clean_tile_chw (float32), noisy_tile_chw (float32), meta (dict)
+    """
+
+    def __init__(
+        self,
+        data_paths: Path | list[Path],
+        data_loading_fn: Callable[[Path], npt.NDArray[np.uint8]],
+        img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
+        pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]],
+        tile_size: int | tuple[int, int],
+        *,
+        mode: Literal["val"] = "val",
+        limit: int | None = None,
+    ) -> None:
+        self.data_loading_fn = data_loading_fn
+        self.img_standardization_fn = img_standardization_fn
+        self.pairing_fn = pairing_fn
+
+        self.img_paths = _load_image_paths(data_paths, mode)
+        if limit is not None:
+            self.img_paths = self.img_paths[:limit]
+
+        if isinstance(tile_size, int):
+            self.tile_h = self.tile_w = tile_size
+        else:
+            self.tile_h, self.tile_w = tile_size
+
+        self._tile_fn = iter_image_tiles((self.tile_h, self.tile_w))
+
+        # Precompute mapping: dataset index
+        # -> (img_idx, tile_idx, tile_y, tile_x, tiles_per_image, orig_h, orig_w, padded_h, padded_w)
+        self.index_map: list[dict[str, Any]] = []
+        for img_i, p in enumerate(self.img_paths):
+            img = self.data_loading_fn(p)
+            orig_h, orig_w = img.shape[:2]
+            padded, pad_h, pad_w = pad_to_multiple_reflect(img, self.tile_h, self.tile_w)
+            padded_h, padded_w = padded.shape[:2]
+
+            tiles_y = padded_h // self.tile_h
+            tiles_x = padded_w // self.tile_w
+            tiles_per_image = tiles_y * tiles_x
+
+            tile_idx = 0
+            for y in range(0, padded_h, self.tile_h):
+                for x in range(0, padded_w, self.tile_w):
+                    self.index_map.append(
+                        {
+                            "img_i": img_i,
+                            "tile_idx": tile_idx,
+                            "tile_y": y,
+                            "tile_x": x,
+                            "tile_h": self.tile_h,
+                            "tile_w": self.tile_w,
+                            "tiles_per_image": tiles_per_image,
+                            "orig_h": orig_h,
+                            "orig_w": orig_w,
+                            "padded_h": padded_h,
+                            "padded_w": padded_w,
+                            "pad_h": pad_h,
+                            "pad_w": pad_w,
+                            "image_id": str(p),  # path string (stable)
+                        }
+                    )
+                    tile_idx += 1
+
+    def __len__(self) -> int:
+        return len(self.index_map)
+
+    def __getitem__(self, idx: int) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], dict[str, Any]]:
+        m = self.index_map[idx]
+        img_i = int(m["img_i"])
+        tile_y = int(m["tile_y"])
+        tile_x = int(m["tile_x"])
+        tile_h = int(m["tile_h"])
+        tile_w = int(m["tile_w"])
+
+        clean_path = self.img_paths[img_i]
+
+        clean_u8 = self.data_loading_fn(clean_path)
+        noisy_u8 = self.pairing_fn(clean_path, clean_u8)
+
+        # pad both the same way (reflect)
+        clean_pad, _, _ = pad_to_multiple_reflect(clean_u8, tile_h, tile_w)
+        noisy_pad, _, _ = pad_to_multiple_reflect(noisy_u8, tile_h, tile_w)
+
+        # slice directly by coordinates (faster than iterating generator)
+        if clean_pad.ndim == IMAGE_DIMENSIONS_3D:
+            clean_tile_u8 = clean_pad[tile_y : tile_y + tile_h, tile_x : tile_x + tile_w, :]
+            noisy_tile_u8 = noisy_pad[tile_y : tile_y + tile_h, tile_x : tile_x + tile_w, :]
+        else:
+            clean_tile_u8 = clean_pad[tile_y : tile_y + tile_h, tile_x : tile_x + tile_w]
+            noisy_tile_u8 = noisy_pad[tile_y : tile_y + tile_h, tile_x : tile_x + tile_w]
+
+        clean = hwc_to_chw(self.img_standardization_fn(clean_tile_u8))
+        noisy = hwc_to_chw(self.img_standardization_fn(noisy_tile_u8))
+
+        meta = dict(m)
+        return clean, noisy, meta

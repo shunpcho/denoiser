@@ -94,7 +94,7 @@ class TrainTrainer(Trainer):
             path,
         )
 
-    def loop(self, *, train: bool = True) -> dict[str, float]:
+    def loop(self, train: bool = True) -> dict[str, float]:
         """Do pass on every step of the train or validation dataset.
 
         Args:
@@ -113,7 +113,13 @@ class TrainTrainer(Trainer):
         fetch_time: float | None = None
         step_start_time = time.perf_counter()
 
-        for step, (clean, noisy) in enumerate(dataloader, 1):
+        for step, batch in enumerate(dataloader, 1):
+            # batch can be (clean, noisy) or (clean, noisy, meta)
+            if isinstance(batch, (tuple, list)) and len(batch) == 3:
+                clean, noisy, _meta = batch
+            else:
+                clean, noisy = batch
+
             clean = clean.to(self.device, non_blocking=True)
             noisy = noisy.to(self.device, non_blocking=True)
             data_loading_finished_time = time.perf_counter()

@@ -12,7 +12,7 @@ import torch.utils.data
 from torch import optim
 
 from denoiser.configs.config import PairingKeyWords, TrainConfig
-from denoiser.data.data_loader import PairedDataset
+from denoiser.data.data_loader import PairedDataset, TiledPairedDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
     destandardize_img,
@@ -26,7 +26,7 @@ from denoiser.utils.data_utils import collate_fn
 from denoiser.utils.get_logger import create_logger
 from denoiser.utils.tensorboard_log import TensorBoard
 from denoiser.utils.trainer import TrainTrainer
-from denoiser.utils.vis_img import save_validation_predictions
+from denoiser.utils.vis_img import save_validation_predictions_stitched
 
 
 def train(
@@ -124,14 +124,13 @@ def train(
         noise_sigma=noise_sigma,
         limit=limit,
     )
-    val_dataset = PairedDataset(
+    val_dataset = TiledPairedDataset(
         val_data_path,
         data_loading_fn=clean_img_loader,
         img_standardization_fn=standardization_fn,
         pairing_fn=noisy_img_loader,
-        data_augmentation_fn=augmentation_fn,  # type: ignore[arg-type]
+        tile_size=crop_size,
         mode="val",
-        noise_sigma=noise_sigma,
         limit=limit,
     )
     dataset_size = len(train_dataset) + len(val_dataset)
@@ -179,7 +178,11 @@ def train(
 
     # Debug: Check data types and shapes
     sample_batch = next(iter(val_loader))
-    clean_sample, _ = sample_batch
+    if isinstance(sample_batch, (tuple, list)) and len(sample_batch) == 3:
+        clean_sample, _, _ = sample_batch
+    else:
+        clean_sample, _ = sample_batch
+
     input_shape = clean_sample.shape
     logger.info("Start training ...")
     logger.info(f"Input shape: {input_shape}")
@@ -262,14 +265,14 @@ def train(
 
             # Save validation prediction images
             pred_images_dir = output_dir / "validation_predictions"
-            save_validation_predictions(
+            save_validation_predictions_stitched(
                 model=models,
                 val_loader=val_loader,
                 device=device,
                 destandardize_fn=destandardize_img_fn,
                 save_dir=pred_images_dir,
                 iteration=iteration,
-                max_samples=4,
+                max_images=4,  # ここは「保存する元画像枚数」
             )
             logger.info(f"Validation prediction images saved to {pred_images_dir}")
 

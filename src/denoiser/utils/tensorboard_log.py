@@ -159,7 +159,15 @@ class TensorBoard:
             try:
                 # Get a batch of data from the dataloader
                 batch = next(iter(self.dataloader))
-                clean_images, noisy_images = batch
+                # Handle dataloaders that return (clean, noisy) or (clean, noisy, metas)
+                if isinstance(batch, (tuple, list)):
+                    if len(batch) >= 2:
+                        clean_images = batch[0]
+                        noisy_images = batch[1]
+                    else:
+                        raise ValueError("Expected dataloader batch with at least 2 elements")
+                else:
+                    raise TypeError(f"Unexpected batch type from dataloader: {type(batch)}")
 
                 # Move to device and limit to max_outputs
                 clean_images = clean_images[: self.max_outputs].to(self.device)
