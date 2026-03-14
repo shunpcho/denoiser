@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
-IMAGE_DIMENSIONS_3D = 3  # Number of color channels (e.g., RGB)
+from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITHOUT_META, IMAGE_DIMENSIONS_3D
 
 
 class InvalidMetaTypeError(TypeError):
@@ -16,9 +16,6 @@ class InvalidMetaTypeError(TypeError):
     @staticmethod
     def build_message(meta: object) -> str:
         return f"meta must be dict, got: {type(meta)}"
-
-
-BATCH_ENTRY_LENGTH_WITHOUT_META = 2
 
 
 class InvalidBatchEntryLengthError(ValueError):

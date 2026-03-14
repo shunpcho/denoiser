@@ -13,12 +13,7 @@ if TYPE_CHECKING:
 
     from denoiser.configs.config import PairingKeyWords
 
-
-# Constants
-MIN_PIXEL_VALUE = 0
-MAX_PIXEL_VALUE = 255
-MIN_DETECTOR_COUNT = 2
-IMAGE_DIMENSIONS_3D = 3  # (H, W, C)
+from denoiser.utils.alias import IMAGE_DIMENSIONS_3D, MAX_PIXEL_VALUE, MIN_DETECTOR_COUNT, MIN_PIXEL_VALUE
 
 
 # data_loading_fn
@@ -100,93 +95,86 @@ def load_img_clean(pairing_words: PairingKeyWords | None) -> Callable[[Path], np
     return load_img
 
 
-# Pairing functions
-def pairing_clean_noisy(
-    pairing_words: PairingKeyWords | None, noise_sigma: float
+def _add_gaussian_noise_factory(
+    noise_sigma: float,
 ) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
-    """Create function to load noisy images from clean image paths.
+    def add_gaussian_noise(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
+        if clean_img is None:
+            img = Image.open(path).convert("RGB")
+            img_array = np.asarray(img).astype(np.uint8)
+        else:
+            img_array = clean_img
+        rng = np.random.default_rng()
+        noise = rng.normal(0, noise_sigma, img_array.shape).astype(np.int16)
+        noisy_img = img_array.astype(np.int16) + noise
+        return np.clip(noisy_img, MIN_PIXEL_VALUE, MAX_PIXEL_VALUE).astype(np.uint8)
 
-    Args:
-        pairing_words: Dictionary containing pairing keywords for clean/noisy images
-        noise_sigma: Standard deviation for Gaussian noise when generating synthetic noise
+    return add_gaussian_noise
 
-    Returns:
-        Function that takes a clean image path and returns noisy image array
-    """
-    # Case 1: Generate synthetic Gaussian noise
-    if pairing_words is None:
 
-        def add_gaussian_noise(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
-            """Add Gaussian noise to clean image."""
-            if clean_img is None:
-                img = Image.open(path).convert("RGB")
-                img_array = np.asarray(img).astype(np.uint8)
-            else:
-                img_array = clean_img
-            rng = np.random.default_rng()
-            noise = rng.normal(0, noise_sigma, img_array.shape).astype(np.int16)
-            noisy_img = img_array.astype(np.int16) + noise
-            return np.clip(noisy_img, MIN_PIXEL_VALUE, MAX_PIXEL_VALUE).astype(np.uint8)
-
-        return add_gaussian_noise
-
-    # Case 2: Load existing noisy images (RGB)
-    elif pairing_words.noisy is not None and pairing_words.detector is None:
-
-        def load_noisy_rgb(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
-            """Load corresponding noisy image as RGB."""
-            noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
-            img = Image.open(noisy_path).convert("RGB")
-            img_array = np.asarray(img)
-            return img_array.astype(np.uint8)
-
-        return load_noisy_rgb
-
-    # Case 3: Load detector images
-    if pairing_words.detector is not None and len(pairing_words.detector) >= MIN_DETECTOR_COUNT:
-        # capture detector keywords to help static type checkers and avoid subscripting None
-        det0 = pairing_words.detector[0]
-        det1 = pairing_words.detector[1]
-
-        def load_noisy_dual_detector(
-            path: Path, clean_img: npt.NDArray[np.uint8] | None = None
-        ) -> npt.NDArray[np.uint8]:
-            """Load dual detector noisy images and concatenate channel-wise."""
-            noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
-            detect_a_path = noisy_path
-            detect_b_path = noisy_path.with_name(noisy_path.name.replace(det0, det1))
-            img_detect_a = load_img_gray(detect_a_path)
-            img_detect_b = load_img_gray(detect_b_path)
-            # Expand dimensions: (H, W) -> (H, W, 1)
-            img_a = np.expand_dims(img_detect_a, axis=-1)
-            img_b = np.expand_dims(img_detect_b, axis=-1)
-            # Concatenate: (H, W, 2)
-            return np.concatenate([img_a, img_b], axis=-1)
-
-        return load_noisy_dual_detector
-
-    elif pairing_words.detector is not None and len(pairing_words.detector) == 1:
-
-        def load_noisy_single_detector(
-            path: Path, clean_img: npt.NDArray[np.uint8] | None = None
-        ) -> npt.NDArray[np.uint8]:
-            """Load single detector noisy image as grayscale with channel dimension."""
-            noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
-            img_detect = load_img_gray(noisy_path)
-            # Add channel dimension: (H, W) -> (H, W, 1)
-            return np.expand_dims(img_detect, axis=-1)
-
-        return load_noisy_single_detector
-
-    # Fallback: load noisy RGB image
-    def load_noisy_rgb_fallback(path: Path, clean_img: npt.NDArray[np.uint8] | None = None) -> npt.NDArray[np.uint8]:
-        """Fallback: Load noisy RGB image."""
-        noisy_path = Path(str(path).replace(pairing_words.clean, pairing_words.noisy))  # type: ignore[union-attr]
+def _load_noisy_rgb_factory(
+    clean_kw: str, noisy_kw: str
+) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
+    def load_noisy_rgb(path: Path) -> npt.NDArray[np.uint8]:
+        noisy_path = Path(str(path).replace(clean_kw, noisy_kw))
         img = Image.open(noisy_path).convert("RGB")
         img_array = np.asarray(img)
         return img_array.astype(np.uint8)
 
-    return load_noisy_rgb_fallback
+    return load_noisy_rgb
+
+
+def _load_noisy_dual_detector_factory(
+    clean_kw: str, noisy_kw: str, det0: str, det1: str
+) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
+    def load_noisy_dual_detector(path: Path) -> npt.NDArray[np.uint8]:
+        noisy_path = Path(str(path).replace(clean_kw, noisy_kw))
+        detect_a_path = noisy_path
+        detect_b_path = noisy_path.with_name(noisy_path.name.replace(det0, det1))
+        img_detect_a = load_img_gray(detect_a_path)
+        img_detect_b = load_img_gray(detect_b_path)
+        img_a = np.expand_dims(img_detect_a, axis=-1)
+        img_b = np.expand_dims(img_detect_b, axis=-1)
+        return np.concatenate([img_a, img_b], axis=-1)
+
+    return load_noisy_dual_detector
+
+
+def _load_noisy_single_detector_factory(
+    clean_kw: str, noisy_kw: str
+) -> Callable[[Path], npt.NDArray[np.uint8]]:
+    def load_noisy_single_detector(path: Path) -> npt.NDArray[np.uint8]:
+        noisy_path = Path(str(path).replace(clean_kw, noisy_kw))
+        img_detect = load_img_gray(noisy_path)
+        return np.expand_dims(img_detect, axis=-1)
+
+    return load_noisy_single_detector
+
+
+# Pairing functions
+def pairing_clean_noisy(
+    pairing_words: PairingKeyWords | None, noise_sigma: float
+) -> Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]]:
+    """Create function to load noisy images from clean image paths."""
+    if pairing_words is None:
+        return _add_gaussian_noise_factory(noise_sigma)
+
+    # prefer explicit detector handling when present
+    if pairing_words.detector is not None:
+        det_len = len(pairing_words.detector)
+        if det_len >= MIN_DETECTOR_COUNT:
+            det0 = pairing_words.detector[0]
+            det1 = pairing_words.detector[1]
+            return _load_noisy_dual_detector_factory(pairing_words.clean, pairing_words.noisy, det0, det1)
+        if det_len == 1:
+            return _load_noisy_single_detector_factory(pairing_words.clean, pairing_words.noisy)
+
+    # noisy keyword without detector -> RGB loader
+    if pairing_words.noisy is not None and pairing_words.detector is None:
+        return _load_noisy_rgb_factory(pairing_words.clean, pairing_words.noisy)
+
+    # fallback to RGB loader
+    return _load_noisy_rgb_factory(pairing_words.clean, pairing_words.noisy)
 
 
 def compose_transformations(

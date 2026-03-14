@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
@@ -13,9 +13,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import Literal
 
-
 from denoiser.data.tiling import iter_image_tiles, pad_to_multiple_reflect
-from denoiser.utils.data_utils import hwc_to_chw, IMAGE_DIMENSIONS_3D
+from denoiser.utils.alias import IMAGE_DIMENSIONS_3D, IndexMapEntry
+from denoiser.utils.data_utils import hwc_to_chw
 
 
 class PairedDataset(
@@ -101,7 +101,7 @@ def _load_image_paths(data_paths: list[Path] | Path, mode: str) -> list[Path]:
     return img_paths
 
 
-class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], dict[str, Any]]]):
+class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], IndexMapEntry]]):
     """Validation dataset that returns ALL tiles of each image.
 
     - Loads clean/noisy pair
@@ -120,7 +120,6 @@ class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.f
         img_standardization_fn: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.float32]],
         pairing_fn: Callable[[Path, npt.NDArray[np.uint8] | None], npt.NDArray[np.uint8]],
         tile_size: int | tuple[int, int],
-        *,
         mode: Literal["val"] = "val",
         limit: int | None = None,
     ) -> None:
@@ -139,9 +138,8 @@ class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.f
 
         self._tile_fn = iter_image_tiles((self.tile_h, self.tile_w))
 
-        # Precompute mapping: dataset index
-        # -> (img_idx, tile_idx, tile_y, tile_x, tiles_per_image, orig_h, orig_w, padded_h, padded_w)
-        self.index_map: list[dict[str, Any]] = []
+        self.index_map: list[IndexMapEntry] = []
+
         for img_i, p in enumerate(self.img_paths):
             img = self.data_loading_fn(p)
             orig_h, orig_w = img.shape[:2]
@@ -155,30 +153,29 @@ class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.f
             tile_idx = 0
             for y in range(0, padded_h, self.tile_h):
                 for x in range(0, padded_w, self.tile_w):
-                    self.index_map.append(
-                        {
-                            "img_i": img_i,
-                            "tile_idx": tile_idx,
-                            "tile_y": y,
-                            "tile_x": x,
-                            "tile_h": self.tile_h,
-                            "tile_w": self.tile_w,
-                            "tiles_per_image": tiles_per_image,
-                            "orig_h": orig_h,
-                            "orig_w": orig_w,
-                            "padded_h": padded_h,
-                            "padded_w": padded_w,
-                            "pad_h": pad_h,
-                            "pad_w": pad_w,
-                            "image_id": str(p),  # path string (stable)
-                        }
-                    )
+                    entry: IndexMapEntry = {
+                        "img_i": img_i,
+                        "tile_idx": tile_idx,
+                        "tile_y": y,
+                        "tile_x": x,
+                        "tile_h": self.tile_h,
+                        "tile_w": self.tile_w,
+                        "tiles_per_image": tiles_per_image,
+                        "orig_h": orig_h,
+                        "orig_w": orig_w,
+                        "padded_h": padded_h,
+                        "padded_w": padded_w,
+                        "pad_h": pad_h,
+                        "pad_w": pad_w,
+                        "image_id": str(p),  # path string (stable)
+                    }
+                    self.index_map.append(entry)
                     tile_idx += 1
 
     def __len__(self) -> int:
         return len(self.index_map)
 
-    def __getitem__(self, idx: int) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], dict[str, Any]]:
+    def __getitem__(self, idx: int) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], IndexMapEntry]:
         m = self.index_map[idx]
         img_i = int(m["img_i"])
         tile_y = int(m["tile_y"])
@@ -188,6 +185,14 @@ class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.f
 
         clean_path = self.img_paths[img_i]
 
+        clean, noisy = self._extract_and_standardize_tile(clean_path, tile_y, tile_x, tile_h, tile_w)
+
+        meta = m
+        return clean, noisy, meta
+
+    def _extract_and_standardize_tile(
+        self, clean_path: Path, tile_y: int, tile_x: int, tile_h: int, tile_w: int
+    ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         clean_u8 = self.data_loading_fn(clean_path)
         noisy_u8 = self.pairing_fn(clean_path, clean_u8)
 
@@ -205,6 +210,4 @@ class TiledPairedDataset(Dataset[tuple[npt.NDArray[np.float32], npt.NDArray[np.f
 
         clean = hwc_to_chw(self.img_standardization_fn(clean_tile_u8))
         noisy = hwc_to_chw(self.img_standardization_fn(noisy_tile_u8))
-
-        meta = dict(m)
-        return clean, noisy, meta
+        return clean, noisy

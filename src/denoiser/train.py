@@ -272,7 +272,7 @@ def train(
                 destandardize_fn=destandardize_img_fn,
                 save_dir=pred_images_dir,
                 iteration=iteration,
-                max_images=4,  # ここは「保存する元画像枚数」
+                max_images=4,
             )
             logger.info(f"Validation prediction images saved to {pred_images_dir}")
 

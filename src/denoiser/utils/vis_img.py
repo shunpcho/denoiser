@@ -7,6 +7,8 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader
 
+from denoiser.utils.alias import IndexMapEntry
+
 
 def save_validation_predictions(
     model: torch.nn.Module,
@@ -96,7 +98,7 @@ def _save_canvas(
 
 
 def process_batch(
-    batch: tuple[torch.Tensor, torch.Tensor, list[dict[str, int | str]]],
+    batch: tuple[torch.Tensor, torch.Tensor, list[IndexMapEntry]],
     buffers: dict[str, dict[str, object]],
     saved: int,
     max_images: int,
@@ -114,43 +116,38 @@ def process_batch(
     preds = model(noisy_tiles)  # (B, C, tile_h, tile_w)
 
     for i in range(preds.size(0)):
-        m = metas[i]
-        assert isinstance(m, dict)
-        image_id = str(m["image_id"])
+        mi = metas[i]
+        assert isinstance(mi, dict)
+        image_id = str(mi["image_id"])
 
-        padded_h = int(m["padded_h"])
-        padded_w = int(m["padded_w"])
-        orig_h = int(m["orig_h"])
-        orig_w = int(m["orig_w"])
-
-        tile_y = int(m["tile_y"])
-        tile_x = int(m["tile_x"])
-        tile_h = int(m["tile_h"])
-        tile_w = int(m["tile_w"])
-
+        # Initialize canvas for this image if needed
         if image_id not in buffers:
-            canvas = torch.zeros(
-                (preds[i].shape[0], padded_h, padded_w),
-                dtype=preds[i].dtype,
-                device=preds[i].device,
-            )
-            expected = int(m["tiles_per_image"]) if "tiles_per_image" in m else None
             buffers[image_id] = {
-                "canvas": canvas,
-                "orig_h": orig_h,
-                "orig_w": orig_w,
+                "canvas": torch.zeros(
+                    (preds[i].shape[0], int(mi["padded_h"]), int(mi["padded_w"])),
+                    dtype=preds[i].dtype,
+                    device=preds[i].device,
+                ),
+                "orig_h": int(mi["orig_h"]),
+                "orig_w": int(mi["orig_w"]),
                 "count": 0,
-                "expected": expected,
+                "expected": int(mi["tiles_per_image"]) if "tiles_per_image" in mi else None,
             }
 
         canvas = buffers[image_id]["canvas"]
         assert isinstance(canvas, torch.Tensor)
 
-        canvas[:, tile_y : tile_y + tile_h, tile_x : tile_x + tile_w] = preds[i]
+        # Write prediction into canvas using inline meta access (reduces locals)
+        canvas[
+            :,
+            int(mi["tile_y"]) : int(mi["tile_y"]) + int(mi["tile_h"]),
+            int(mi["tile_x"]) : int(mi["tile_x"]) + int(mi["tile_w"]),
+        ] = preds[i]
         buffers[image_id]["count"] = int(buffers[image_id]["count"]) + 1
 
-        expected = buffers[image_id]["expected"]
-        if expected is not None and int(buffers[image_id]["count"]) >= int(expected):
+        if buffers[image_id]["expected"] is not None and int(buffers[image_id]["count"]) >= int(
+            buffers[image_id]["expected"]
+        ):
             canvas = buffers[image_id]["canvas"]
             assert isinstance(canvas, torch.Tensor)
             saved = _save_canvas(

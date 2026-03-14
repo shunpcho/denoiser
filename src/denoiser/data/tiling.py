@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
 
-IMAGE_DIMENSIONS_3D = 3  # (H, W, C)
+from denoiser.utils.alias import IMAGE_DIMENSIONS_3D
 
 
 def pad_to_multiple_reflect(

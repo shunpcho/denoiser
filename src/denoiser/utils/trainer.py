@@ -2,11 +2,14 @@ import shutil
 import time
 from pathlib import Path
 
+import numpy as np
+import numpy.typing as npt
 import torch
 from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 
 from denoiser.configs.config import TrainConfig
+from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITH_META, IndexMapEntry
 from denoiser.utils.calculate_loss import calculate_mse, calculate_psnr, calculate_ssim
 from denoiser.utils.loss.loss_f import LossFunction
 
@@ -22,7 +25,9 @@ class Trainer:
         """
         self.device = device
 
-    def loop(self, *, train: bool = True) -> dict[str, float]: ...
+    def loop(self, train: bool = True) -> dict[str, float]:
+        msg = "Subclasses should implement the loop method to perform training or validation steps."
+        raise NotImplementedError(msg)
 
     def train_step(self) -> dict[str, float]:
         """Perform a training batch."""
@@ -114,12 +119,7 @@ class TrainTrainer(Trainer):
         step_start_time = time.perf_counter()
 
         for step, batch in enumerate(dataloader, 1):
-            # batch can be (clean, noisy) or (clean, noisy, meta)
-            if isinstance(batch, (tuple, list)) and len(batch) == 3:
-                clean, noisy, _meta = batch
-            else:
-                clean, noisy = batch
-
+            clean, noisy = self._extract_clean_noisy(batch)
             clean = clean.to(self.device, non_blocking=True)
             noisy = noisy.to(self.device, non_blocking=True)
             data_loading_finished_time = time.perf_counter()
@@ -133,23 +133,10 @@ class TrainTrainer(Trainer):
             loss = loss_components["Loss"]
 
             if train:
-                if self.use_amp:
-                    self.grad_scaler.scale(loss).backward()
-                    self.grad_scaler.step(self.optimizer)
-                    self.grad_scaler.update()
-                else:
-                    loss.backward()
-                    self.optimizer.step()
+                self._backward_and_step(loss)
 
-            for name, value in loss_components.items():
-                step_losses[name] = step_losses.get(name, 0.0) + value.item()
-            with torch.no_grad():
-                mse = calculate_mse(outputs, clean)
-                psnr = calculate_psnr(outputs, clean)
-                ssim = calculate_ssim(outputs, clean)
-            step_losses["MSE"] = step_losses.get("MSE", 0.0) + mse
-            step_losses["PSNR"] = step_losses.get("PSNR", 0.0) + psnr
-            step_losses["SSIM"] = step_losses.get("SSIM", 0.0) + ssim
+            self._accumulate_losses(step_losses, loss_components)
+            self._accumulate_metrics(step_losses, outputs, clean)
 
             previous_step_start_time = step_start_time
             current_time = time.perf_counter()
@@ -170,6 +157,41 @@ class TrainTrainer(Trainer):
             )
 
         return {key: value / steps for key, value in step_losses.items()}
+
+    @staticmethod
+    def _extract_clean_noisy(
+        batch: tuple[npt.NDArray[np.float32], npt.NDArray[np.float32], IndexMapEntry],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # batch can be (clean, noisy) or (clean, noisy, meta)
+        if isinstance(batch, (tuple, list)) and len(batch) == BATCH_ENTRY_LENGTH_WITH_META:
+            clean, noisy, _meta = batch
+        else:
+            clean, noisy = batch
+        return clean, noisy
+
+    def _backward_and_step(self, loss: torch.Tensor) -> None:
+        if self.use_amp:
+            self.grad_scaler.scale(loss).backward()
+            self.grad_scaler.step(self.optimizer)
+            self.grad_scaler.update()
+        else:
+            loss.backward()
+            self.optimizer.step()
+
+    @staticmethod
+    def _accumulate_losses(step_losses: dict[str, float], loss_components: dict[str, torch.Tensor]) -> None:
+        for name, value in loss_components.items():
+            step_losses[name] = step_losses.get(name, 0.0) + value.item()
+
+    @staticmethod
+    def _accumulate_metrics(step_losses: dict[str, float], outputs: torch.Tensor, clean: torch.Tensor) -> None:
+        with torch.no_grad():
+            mse = calculate_mse(outputs, clean)
+            psnr = calculate_psnr(outputs, clean)
+            ssim = calculate_ssim(outputs, clean)
+        step_losses["MSE"] = step_losses.get("MSE", 0.0) + mse
+        step_losses["PSNR"] = step_losses.get("PSNR", 0.0) + psnr
+        step_losses["SSIM"] = step_losses.get("SSIM", 0.0) + ssim
 
     def train_step(self) -> dict[str, float]:
         """Perform a training step."""

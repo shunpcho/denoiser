@@ -23,6 +23,15 @@ try:
 except ImportError:
     _SummaryWriter = None
 
+from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITHOUT_META
+
+
+class InvalidBatchTypeError(TypeError):
+    """Exception raised for invalid batch types from dataloader."""
+
+    def __init__(self, batch_type: object) -> None:
+        super().__init__(f"Unexpected batch type from dataloader: {batch_type}")
+
 
 class TensorBoard:
     """TensorBoard logging wrapper for training metrics and model visualization."""
@@ -150,6 +159,9 @@ class TensorBoard:
             model: The denoising model to generate predictions
             step: Global step value
             tag_prefix: Prefix for the image tags in TensorBoard
+
+        Raises:
+            InvalidBatchTypeError: If the batch type from the dataloader is unexpected.
         """
         if self.writer is None:
             return
@@ -161,13 +173,14 @@ class TensorBoard:
                 batch = next(iter(self.dataloader))
                 # Handle dataloaders that return (clean, noisy) or (clean, noisy, metas)
                 if isinstance(batch, (tuple, list)):
-                    if len(batch) >= 2:
+                    if len(batch) >= BATCH_ENTRY_LENGTH_WITHOUT_META:
                         clean_images = batch[0]
                         noisy_images = batch[1]
                     else:
-                        raise ValueError("Expected dataloader batch with at least 2 elements")
+                        self._raise_invalid_batch_error()
                 else:
-                    raise TypeError(f"Unexpected batch type from dataloader: {type(batch)}")
+                    msg = f"Unexpected batch type from dataloader: {type(batch)}"
+                    raise InvalidBatchTypeError(msg)
 
                 # Move to device and limit to max_outputs
                 clean_images = clean_images[: self.max_outputs].to(self.device)
