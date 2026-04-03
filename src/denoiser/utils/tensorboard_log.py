@@ -13,8 +13,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
 
-    import numpy as np
-    import numpy.typing as npt
     from torch.utils.data import DataLoader
     from torch.utils.tensorboard import SummaryWriter
 
@@ -24,6 +22,11 @@ except ImportError:
     _SummaryWriter = None
 
 from denoiser.utils.alias import BATCH_ENTRY_LENGTH_WITHOUT_META, IndexMapEntry
+
+DISPLAY_SINGLE_IMAGE_DIMS = 3
+DISPLAY_BATCH_DIMS = 4
+DISPLAY_CHANNELS = {1, 3}
+DISPLAY_UINT8_THRESHOLD = 1.5
 
 
 class InvalidBatchTypeError(TypeError):
@@ -123,21 +126,49 @@ class TensorBoard:
             self.writer.add_image(tag, img_tensor, step, dataformats=dataformats)
 
     @staticmethod
-    def _process_tensor_for_display(tensor_batch: torch.Tensor) -> torch.Tensor:
+    def _to_nchw_float01(
+        tensor_or_array: torch.Tensor | npt.NDArray[np.uint8] | npt.NDArray[np.float32],
+    ) -> torch.Tensor:
+        """Convert tensor/ndarray into a float tensor in NCHW with values in [0, 1].
+
+        Raises:
+            ValueError: If input is not a 3D/4D image tensor.
+        """
+        tensor = torch.from_numpy(tensor_or_array) if isinstance(tensor_or_array, np.ndarray) else tensor_or_array
+        tensor = tensor.detach().cpu().float()
+
+        if tensor.ndim == DISPLAY_SINGLE_IMAGE_DIMS:
+            tensor = tensor.unsqueeze(0)
+        if tensor.ndim != DISPLAY_BATCH_DIMS:
+            msg = f"Expected 3D or 4D tensor for display, got shape: {tuple(tensor.shape)}"
+            raise ValueError(msg)
+
+        # Accept both NCHW and NHWC.
+        if tensor.shape[1] not in DISPLAY_CHANNELS and tensor.shape[-1] in DISPLAY_CHANNELS:
+            tensor = tensor.permute(0, 3, 1, 2)
+
+        # uint8-like image arrays should be scaled down for TensorBoard.
+        if tensor.max().item() > DISPLAY_UINT8_THRESHOLD:
+            tensor /= 255.0
+
+        return torch.clamp(tensor, 0.0, 1.0)
+
+    def _process_tensor_for_display(self, tensor_batch: torch.Tensor) -> torch.Tensor:
         """Process tensor batch for TensorBoard display.
 
-        Clamps values to [0, 1] range for proper visualization without destandardization.
+        This uses the project's destandardization function and converts output to
+        TensorBoard-ready NCHW float tensors in [0, 1].
 
         Args:
             tensor_batch: Batch of tensors (N, C, H, W)
 
         Returns:
-            Processed tensor batch normalized to [0, 1] for TensorBoard
+            Processed tensor batch normalized to [0, 1] in NCHW format.
         """
-        # Simply clamp the values to [0, 1] range for visualization
-        # This avoids the complex destandardization process that's causing issues
-        processed_batch = torch.clamp(tensor_batch, 0, 1)
-        return processed_batch
+        tensor_batch = tensor_batch.detach().cpu()
+        # Use the same image conversion logic used elsewhere in the project.
+        destandardized = self.destandardize_img_fn(tensor_batch)
+        return self._to_nchw_float01(destandardized)
 
     @staticmethod
     def _concatenate_images_horizontally(tensor_batch: torch.Tensor) -> torch.Tensor:
@@ -200,9 +231,9 @@ class TensorBoard:
                 predictions = model(noisy_images)
 
                 # Process tensors for display (clamp to [0, 1])
-                clean_batch = TensorBoard._process_tensor_for_display(clean_images.cpu())
-                noisy_batch = TensorBoard._process_tensor_for_display(noisy_images.cpu())
-                pred_batch = TensorBoard._process_tensor_for_display(predictions.cpu())
+                clean_batch = self._process_tensor_for_display(clean_images)
+                noisy_batch = self._process_tensor_for_display(noisy_images)
+                pred_batch = self._process_tensor_for_display(predictions)
 
                 # Concatenate images horizontally for each type
                 noisy_row = self._concatenate_images_horizontally(noisy_batch)
@@ -215,7 +246,7 @@ class TensorBoard:
                 # Log the combined image to TensorBoard
                 self.writer.add_image(f"{tag_prefix}/Comparison", combined_image, step, dataformats="CHW")
 
-            except (StopIteration, RuntimeError, ValueError) as e:
+            except (StopIteration, RuntimeError, ValueError, TypeError) as e:
                 print(f"Warning: Failed to log images to TensorBoard: {e}")
 
         model.train()
