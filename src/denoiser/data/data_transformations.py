@@ -15,11 +15,14 @@ if TYPE_CHECKING:
 
 from denoiser.utils.alias import IMAGE_DIMENSIONS_3D, MAX_PIXEL_VALUE, MIN_DETECTOR_COUNT, MIN_PIXEL_VALUE
 
+TARGET_IMAGE_SIZE: tuple[int, int] = (512, 512)  # PIL uses (width, height)
+RESAMPLE_BILINEAR = Image.Resampling.BILINEAR
+
 
 # data_loading_fn
 def load_img(path: Path) -> npt.NDArray[np.uint8]:
     """Load image as RGB and convert numpy."""
-    img = Image.open(path).convert("RGB")
+    img = Image.open(path).convert("RGB").resize(TARGET_IMAGE_SIZE, resample=RESAMPLE_BILINEAR)
     # Ensure proper conversion to avoid dtype issues
     img_array = np.asarray(img)
     return img_array.astype(np.uint8)
@@ -27,7 +30,7 @@ def load_img(path: Path) -> npt.NDArray[np.uint8]:
 
 def load_img_gray(path: Path) -> npt.NDArray[np.uint8]:
     """Load image as grayscale and convert numpy."""
-    img = Image.open(path).convert("L")
+    img = Image.open(path).convert("L").resize(TARGET_IMAGE_SIZE, resample=RESAMPLE_BILINEAR)
     # Ensure proper conversion to avoid dtype issues
     img_array = np.asarray(img)
     return img_array.astype(np.uint8)
