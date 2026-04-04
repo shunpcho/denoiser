@@ -26,7 +26,7 @@ class LossFunction(nn.Module):
         elif loss_type == "ier":
             self.sfl = SFLLoss()
             self.mse = nn.MSELoss()
-            self.loss_fn = nn.MSELoss()
+            self.loss_fn = SFLLoss()
         else:
             msg = f"Unsupported loss type: {loss_type}"
             raise ValueError(msg)
@@ -38,14 +38,11 @@ class LossFunction(nn.Module):
         assert self.sfl is not None
         assert self.mse is not None
 
-        e_sfl = self.sfl.e_sfl(predicted, target)
-        e_l2 = torch.nn.functional.mse_loss(predicted, target, reduction="none").mean(dim=(1, 2, 3))
-        w_sfl = (e_l2.unsqueeze(1) / e_sfl).mean(dim=0)
-        sfl_loss = (w_sfl * e_sfl).mean()
-        mse_loss = self.mse(predicted, target)
+        loss = self.sfl(predicted, target) + self.mse(predicted, target)
 
-        loss = sfl_loss + mse_loss
+        e_sfl = self.sfl.e_sfl(predicted, target)
         esfl_mean = e_sfl.mean(dim=0)
+
         return loss, esfl_mean
 
     def compute_components(self, predicted: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
