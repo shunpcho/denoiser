@@ -9,6 +9,8 @@ from torch import nn
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+from denoiser.utils.calculate_loss import SSIMLoss
+
 
 class LossFunction(nn.Module):
     def __init__(self, loss_type: str = "mse") -> None:
@@ -23,6 +25,8 @@ class LossFunction(nn.Module):
             self.loss_fn = nn.MSELoss()
         elif loss_type == "mae":
             self.loss_fn = nn.L1Loss()
+        elif loss_type == "ssim":
+            self.loss_fn = SSIMLoss()
         elif loss_type == "ier":
             self.loss_fn = SFLLoss(add_func=nn.MSELoss())
         else:

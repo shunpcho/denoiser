@@ -1,6 +1,8 @@
 import math
+from typing import Literal
 
 import torch
+import torch.nn.functional as f
 
 
 def calculate_psnr(img1: torch.Tensor, img2: torch.Tensor) -> float:
@@ -37,33 +39,55 @@ def calculate_mse(img1: torch.Tensor, img2: torch.Tensor) -> float:
     return torch.nn.functional.mse_loss(img1, img2).item()
 
 
-def denoiser_loss(
-    model: torch.nn.Module,
-    clean: torch.Tensor,
-    noisy: torch.Tensor,
-) -> dict[str, torch.Tensor]:
-    """Calculate MSE loss for denoising task.
+class SSIMLoss(torch.nn.Module):
+    """SSIM loss that matches calculate_ssim() implementation in calculate_loss.py.
 
-    Args:
-        model: The denoising model
-        clean: Clean ground truth images
-        noisy: Noisy input images
-
-    Returns:
-        Dictionary containing MSE loss and metrics
+    - window: avg_pool2d with kernel_size=window_size
+    - c1 = 0.01**2, c2 = 0.03**2  (assumes images in [0, 1])
+    - returns: 1 - mean(ssim_map)
     """
-    outputs = model(noisy)
-    mse_loss = torch.nn.functional.mse_loss(outputs, clean)
 
-    # Calculate metrics for monitoring
-    psnr = calculate_psnr(outputs, clean)
-    ssim = calculate_ssim(outputs, clean)
+    def __init__(self, window_size: int = 11, eps: float = 1e-12, reduction: Literal["mean", "none"] = "mean") -> None:
+        super().__init__()
+        self.window_size = window_size
+        self.eps = eps
+        if reduction not in {"mean", "none"}:
+            msg = "reduction must be 'mean' or 'none'"
+            raise ValueError(msg)
+        self.reduction = reduction
 
-    losses = {
-        "Loss": mse_loss,  # Main loss is MSE
-        "MSE": mse_loss,   # Same as Loss for clarity
-        "PSNR": torch.tensor(psnr, device=mse_loss.device),
-        "SSIM": torch.tensor(ssim, device=mse_loss.device),
-    }
+    def _compute_ssim_map(self, img1: torch.Tensor, img2: torch.Tensor) -> torch.Tensor:
+        """Compute the SSIM map for two images."""
+        ws = self.window_size
+        pad = ws // 2
 
-    return losses
+        mu1 = f.avg_pool2d(img1, ws, padding=pad)
+        mu2 = f.avg_pool2d(img2, ws, padding=pad)
+
+        mu1_sq = mu1.pow(2)
+        mu2_sq = mu2.pow(2)
+        mu1_mu2 = mu1 * mu2
+
+        sigma1_sq = f.avg_pool2d(img1 * img1, ws, padding=pad) - mu1_sq
+        sigma2_sq = f.avg_pool2d(img2 * img2, ws, padding=pad) - mu2_sq
+        sigma12 = f.avg_pool2d(img1 * img2, ws, padding=pad) - mu1_mu2
+
+        c1 = 0.01**2
+        c2 = 0.03**2
+
+        num = (2 * mu1_mu2 + c1) * (2 * sigma12 + c2)
+        den = (mu1_sq + mu2_sq + c1) * (sigma1_sq + sigma2_sq + c2)
+
+        return num / (den + self.eps)
+
+    def forward(self, img1: torch.Tensor, img2: torch.Tensor) -> torch.Tensor:
+        # img1/img2: (N, C, H, W), float, range [0,1] assumed
+        ssim_map = self._compute_ssim_map(img1, img2)
+        ssim = ssim_map.mean(dim=(-1, -2, -3))
+
+        if self.reduction == "mean":
+            ssim = ssim.mean()
+            return 1.0 - ssim
+        else:
+            # Return (N,)
+            return 1.0 - ssim
