@@ -151,9 +151,8 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
         val_dataset,
         batch_size=train_config.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=0,
         pin_memory=device.type == "cuda",
-        persistent_workers=True,
         collate_fn=collate_fn,
     )
 
