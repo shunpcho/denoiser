@@ -24,34 +24,15 @@ class LossFunction(nn.Module):
         elif loss_type == "mae":
             self.loss_fn = nn.L1Loss()
         elif loss_type == "ier":
-            self.sfl = SFLLoss()
-            self.mse = nn.MSELoss()
-            self.loss_fn = SFLLoss()
+            self.loss_fn = SFLLoss(add_func=nn.MSELoss())
         else:
             msg = f"Unsupported loss type: {loss_type}"
             raise ValueError(msg)
 
-    def _compute_ier_loss_and_esfl(
-        self, predicted: torch.Tensor, target: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute IER loss and ESFL in a single pass of subband decomposition."""
-        assert self.sfl is not None
-        assert self.mse is not None
-
-        loss = self.sfl(predicted, target) + self.mse(predicted, target)
-
-        e_sfl = self.sfl.e_sfl(predicted, target)
-        esfl_mean = e_sfl.mean(dim=0)
-
-        return loss, esfl_mean
-
     def compute_components(self, predicted: torch.Tensor, target: torch.Tensor) -> dict[str, torch.Tensor]:
-        if self.loss_type == "ier":
-            loss, esfl = self._compute_ier_loss_and_esfl(predicted, target)
-        else:
-            loss = self.loss_fn(predicted, target)
-            with torch.no_grad():
-                esfl = self.esfl_monitor.e_sfl(predicted, target).mean(dim=0)
+        loss = self.loss_fn(predicted, target)
+        with torch.no_grad():
+            esfl = self.esfl_monitor.e_sfl(predicted, target).mean(dim=0)
 
         components: dict[str, torch.Tensor] = {"Loss": loss}
         for idx, value in enumerate(esfl):
@@ -59,6 +40,4 @@ class LossFunction(nn.Module):
         return components
 
     def forward(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        if self.loss_type == "ier":
-            return self._compute_ier_loss_and_esfl(predicted, target)[0]
         return self.loss_fn(predicted, target)
