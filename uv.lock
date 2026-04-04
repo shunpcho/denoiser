@@ -471,8 +471,8 @@ wheels = [
 
 [[package]]
 name = "image-analysis"
-version = "0.1.0"
-source = { git = "https://github.com/shunpcho/image-analysis.git#79fdd89bdcc651a1c76cd117d82da39f8f312f7d" }
+version = "0.1.2"
+source = { git = "https://github.com/shunpcho/image-analysis.git#af580bda7cae60d0922ba847afc8eb5098968baa" }
 dependencies = [
     { name = "numpy" },
     { name = "pillow" },
