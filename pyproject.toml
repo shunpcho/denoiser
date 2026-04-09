@@ -12,7 +12,7 @@ dependencies = [
     "torch>=2.8.0",
     "torchvision>=0.23.0",
     "tqdm>=4.67.1",
-    "vit_unet>=0.1.0",
+    "vit-unet>=0.3.0",
     "image_analysis>=0.1.2",
 ]
 
@@ -25,7 +25,7 @@ test = ["pytest>=8.0.0", "pytest-cov>=6.0.0", "pytest-mock>=3.14.0"]
 lint = ["ruff>=0.13.1", "pyright>=1.1.405", "flake8>=7.3.0", "codespell>=2.4.2"]
 
 [tool.uv.sources]
-vit_unet = { git = "https://github.com/shunpcho/vit-unet.git" }
+vit_unet = { git = "https://github.com/shunpcho/vit-unet.git", tag = "v0.3.0" }
 image_analysis = { git = "https://github.com/shunpcho/image-analysis.git" }
 
 [build-system]
