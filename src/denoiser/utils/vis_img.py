@@ -52,9 +52,19 @@ def save_validation_predictions(
                     pred_np = destandardize_fn(predictions[i].cpu())
 
                     # Handle different image formats
-                    grayscale_dims = 2
-                    if clean_images[i].ndim == grayscale_dims:  # Grayscale
+                    grayscale_channel = 1
+                    double_detector_channels = 2
+                    if clean_images[i].shape[1] == grayscale_channel:  # Grayscale
                         pred_img = Image.fromarray(pred_np, mode="L")
+                        pred_img.save(save_dir / f"iter_{iteration:06d}_sample_{i:02d}_pred.png")
+                    elif clean_images[i].shape[1] == double_detector_channels:  # Double-detector
+                        pred_np_detector1 = pred_np[:, :, 0]
+                        pred_np_detector2 = pred_np[:, :, 1]
+                        pred_img_detector1 = Image.fromarray(pred_np_detector1, mode="L")
+                        pred_img_detector2 = Image.fromarray(pred_np_detector2, mode="L")
+                        # TODO: Change images name
+                        pred_img_detector1.save(save_dir / f"iter_{iteration:06d}_sample_{i:02d}_pred_detector1.png")
+                        pred_img_detector2.save(save_dir / f"iter_{iteration:06d}_sample_{i:02d}_pred_detector2.png")
                     else:  # RGB
                         pred_img = Image.fromarray(pred_np)
 
