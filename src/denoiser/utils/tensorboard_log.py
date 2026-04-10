@@ -9,6 +9,8 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
+from denoiser.configs.config import PairingKeyWords
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
@@ -53,6 +55,7 @@ class TensorBoard:
         device: torch.device,
         crop_size: int | tuple[int, int],
         destandardize_img_fn: Callable[[npt.NDArray[np.float32] | torch.Tensor], npt.NDArray[np.uint8]],
+        img_read_keywords: PairingKeyWords | None = None,
         max_outputs: int = 4,
     ) -> None:
         """Initialize TensorBoard logger.
@@ -63,9 +66,14 @@ class TensorBoard:
             device: Device to run computations on
             crop_size: Size of image crops
             destandardize_img_fn: Function to convert normalized images back to uint8
+            img_read_keywords: Keywords for reading images
             max_outputs: Maximum number of images to log
         """
         self.dataloader = dataloader
+        self.img_read_keywords = img_read_keywords
+        self.img_channels = (
+            3 if img_read_keywords is None or img_read_keywords.detector is None else len(img_read_keywords.detector)
+        )
         self.device = device
         self.crop_size = crop_size if isinstance(crop_size, tuple) else (crop_size, crop_size)
         self.destandardize_img_fn = destandardize_img_fn
@@ -243,8 +251,25 @@ class TensorBoard:
                 # Concatenate vertically: Noisy -> Clean -> Predictions
                 combined_image = torch.cat([noisy_row, clean_row, pred_row], dim=1)  # dim=1 is height
 
-                # Log the combined image to TensorBoard
-                self.writer.add_image(f"{tag_prefix}/Comparison", combined_image, step, dataformats="CHW")
+                if self.img_channels in {1, 3}:
+                    # Log the combined image to TensorBoard
+                    self.writer.add_image(f"{tag_prefix}/Comparison", combined_image, step, dataformats="CHW")
+
+                else:
+                    combined_image_detector1 = combined_image[:1, :, :]  # First channel
+                    combined_image_detector2 = combined_image[1:2, :, :]  # Second channel
+                    self.writer.add_image(
+                        f"{tag_prefix}/{self.img_read_keywords.detector[0]!s}",
+                        combined_image_detector1,
+                        step,
+                        dataformats="CHW",
+                    )
+                    self.writer.add_image(
+                        f"{tag_prefix}/{self.img_read_keywords.detector[1]!s}",
+                        combined_image_detector2,
+                        step,
+                        dataformats="CHW",
+                    )
 
             except (StopIteration, RuntimeError, ValueError, TypeError) as e:
                 print(f"Warning: Failed to log images to TensorBoard: {e}")
