@@ -199,6 +199,7 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
     tb_logger = TensorBoard(
         log_dir=tblog_dir,
         dataloader=val_loader,
+        img_read_keywords=pairing_words,
         device=device,
         crop_size=train_config.crop_size,
         destandardize_img_fn=destandardize_img_fn,
