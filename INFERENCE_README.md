@@ -14,15 +14,24 @@ This module provides functionality to run inference using trained denoiser model
 You can use the inference module directly from the command line:
 
 ```bash
-# Denoise a single image
-python -m denoiser.inference --model results/best_model.pth --input noisy_image.jpg --output denoised_image.jpg
-
 # Denoise all images in a directory
-python -m denoiser.inference --model results/best_model.pth --input ./noisy_images/ --output ./denoised_images/ --batch
+python -m denoiser.inference --model results/best_model.pth --input ./noisy_images/ --output ./denoised_images/
 
 # Use CPU instead of GPU
-python -m denoiser.inference --model results/best_model.pth --input noisy_image.jpg --output denoised_image.jpg --device cpu
+python -m denoiser.inference --model results/best_model.pth --input ./noisy_images/ --output ./denoised_images/ --device cpu
 ```
+
+<details>
+<summary>Inference options</summary>
+
+| Args       | Type | Default  | Detail                                     |
+| ---------- | ---- | -------- | ------------------------------------------ |
+| `--model`  | Path | Required | Path to model checkpoint                   |
+| `--input`  | Path | Required | Input directory that contains noisy images |
+| `--output` | Path | Required | Output directory for denoised images       |
+| `--device` | str  | "auto"   | Device option (`cpu` / `cuda` / `auto`)    |
+
+</details>
 
 ### Python API
 
@@ -66,6 +75,7 @@ The inference module expects model checkpoints saved in the format used by the t
 ## Image Processing
 
 The inference module handles:
+
 - Loading images in various formats (PNG, JPG, TIFF, etc.)
 - Preprocessing (standardization to [0,1] range)
 - Model inference
@@ -75,6 +85,7 @@ The inference module handles:
 ## Error Handling
 
 The module provides appropriate error handling for:
+
 - Missing model files
 - Invalid image files
 - CUDA out-of-memory errors
