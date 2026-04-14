@@ -20,7 +20,7 @@ def create_model(
             preprocessing="conv",
             im_size=256,
             patch_size=32,
-            num_channels=3,
+            num_channels=in_channels,
             hidden_dim=128,
             num_heads=8,
             attn_drop=0.2,
