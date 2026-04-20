@@ -29,9 +29,9 @@ class _TrainConfigKwargs(TypedDict, total=False):
     loss_type: str
     iteration: int
     interval: int
-    pretrain_model_path: str | None
-    output_dir: str
-    log_dir: str
+    pretrain_model_path: Path | None
+    output_dir: Path
+    log_dir: Path
     pairing_keywords: PairingKeyWords | None
     tensorboard: bool
     device: torch.device
