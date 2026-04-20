@@ -87,7 +87,7 @@ class TensorBoard:
 
         # Keep previous snapshots for delta-based weight analysis.
         self._previous_weights: dict[str, torch.Tensor] = {}
-        self._weight_layout_signature: tuple[str, ...] | None = None
+        self._weight_layout_signature: tuple[tuple[str, ...], tuple[str, ...]] | None = None
 
     @staticmethod
     def _select_analysis_layers(model: torch.nn.Module, max_layers: int) -> list[tuple[str, torch.nn.Parameter]]:
@@ -121,8 +121,8 @@ class TensorBoard:
         if self.writer is None:
             return
 
-        signature = tuple(layer_names)
-        if not signature or self._weight_layout_signature == signature:
+        signature = (tuple(layer_names), tuple(sorted(include_tags)))
+        if not layer_names or self._weight_layout_signature == signature:
             return
 
         alignment_tags = [f"WeightAnalysis/Alignment/{name_a}__{name_b}" for name_a, name_b in pairwise(layer_names)]
@@ -223,6 +223,8 @@ class TensorBoard:
             return
 
         active_tags = include_tags if include_tags is not None else WEIGHT_ANALYSIS_DEFAULT_TAGS
+        if not active_tags:
+            return
         eps = 1e-12
         selected_layers = self._select_analysis_layers(model, max_layers=max_layers)
         self._register_weight_dashboard([name for name, _ in selected_layers], include_tags=active_tags)
