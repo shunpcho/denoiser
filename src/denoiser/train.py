@@ -11,7 +11,7 @@ import torch
 import torch.utils.data
 from torch import optim
 
-from denoiser.configs.config import PairingKeyWords, TrainConfig
+from denoiser.configs.config import PairingKeyWords, TensorboardConfig, TrainConfig
 from denoiser.data.data_loader import PairedDataset, TiledPairedDataset
 from denoiser.data.data_transformations import (
     compose_transformations,
@@ -197,29 +197,32 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
         val_loader,
     )
 
-    tblog_dir = output_dir / "tensorboard"
-    tb_logger = TensorBoard(
-        log_dir=tblog_dir,
-        dataloader=val_loader,
-        device=device,
-        crop_size=train_config.crop_size,
-        destandardize_img_fn=destandardize_img_fn,
-        max_outputs=4,
-    )
-    if train_config.tensorboard:
+    tb_config = train_config.tensorboard_config
+    tb_logger: TensorBoard | None = None
+    if tb_config.enabled:
+        tblog_dir = output_dir / tb_config.log_subdir
+        tb_logger = TensorBoard(
+            log_dir=tblog_dir,
+            dataloader=val_loader,
+            device=device,
+            crop_size=train_config.crop_size,
+            destandardize_img_fn=destandardize_img_fn,
+            max_outputs=tb_config.max_outputs,
+        )
         logger.info(f"TensorBoard logging enabled: {tblog_dir}")
 
-    if train_config.tensorboard:
+    if tb_logger is not None:
         sample_input = torch.randn(1, 3, train_config.crop_size, train_config.crop_size).to(device)
-        tb_logger.log_model_graph(models, sample_input)
-        logger.info("Model graph logged to TensorBoard.")
+        if "graph" in tb_config.items:
+            tb_logger.log_model_graph(models, sample_input)
+            logger.info("Model graph logged to TensorBoard.")
 
     train_start_time = time.time()
 
     iteration = 0
     best_val_loss = float("inf")
 
-    while iteration < train_config.iteration:
+    while iteration < train_config.iteration:  # noqa: PLR1702
         iteration += 1
         train_loss = trainer.train_step()
 
@@ -237,36 +240,39 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
                 trainer.save_model(output_dir / "best_model.pth")
                 logger.info(f"New best model saved at iteration {iteration}")
 
-            tb_logger.log_training_metrics(
-                train_loss=train_loss_value,
-                val_loss=val_loss,
-                learning_rate=float(scheduler.get_last_lr()[0]),
-                step=iteration,
-            )
-            if "MSE" in train_loss:
-                tb_logger.log_scalar("Train/MSE", train_loss["MSE"], iteration)
-            if "MSE" in val_losses:
-                tb_logger.log_scalar("Val/MSE", val_losses["MSE"], iteration)
-            if "PSNR" in train_loss:
-                tb_logger.log_scalar("Train/PSNR", train_loss["PSNR"], iteration)
-            if "SSIM" in train_loss:
-                tb_logger.log_scalar("Train/SSIM", train_loss["SSIM"], iteration)
-            if "PSNR" in val_losses:
-                tb_logger.log_scalar("Val/PSNR", val_losses["PSNR"], iteration)
-            if "SSIM" in val_losses:
-                tb_logger.log_scalar("Val/SSIM", val_losses["SSIM"], iteration)
+            if tb_logger is not None:
+                if "metrics" in tb_config.items:
+                    tb_logger.log_training_metrics(
+                        train_loss=train_loss_value,
+                        val_loss=val_loss,
+                        learning_rate=float(scheduler.get_last_lr()[0]),
+                        step=iteration,
+                    )
+                    if "MSE" in train_loss and "train-mse" in tb_config.metric_tags:
+                        tb_logger.log_scalar("Train/MSE", train_loss["MSE"], iteration)
+                    if "MSE" in val_losses and "val-mse" in tb_config.metric_tags:
+                        tb_logger.log_scalar("Val/MSE", val_losses["MSE"], iteration)
+                    if "PSNR" in train_loss and "train-psnr" in tb_config.metric_tags:
+                        tb_logger.log_scalar("Train/PSNR", train_loss["PSNR"], iteration)
+                    if "SSIM" in train_loss and "train-ssim" in tb_config.metric_tags:
+                        tb_logger.log_scalar("Train/SSIM", train_loss["SSIM"], iteration)
+                    if "PSNR" in val_losses and "val-psnr" in tb_config.metric_tags:
+                        tb_logger.log_scalar("Val/PSNR", val_losses["PSNR"], iteration)
+                    if "SSIM" in val_losses and "val-ssim" in tb_config.metric_tags:
+                        tb_logger.log_scalar("Val/SSIM", val_losses["SSIM"], iteration)
+                    if "train-esfl" in tb_config.metric_tags:
+                        for name, value in train_loss.items():
+                            if name.startswith("ESFL_"):
+                                tb_logger.log_scalar(f"Train/{name}", value, iteration)
+                    if "val-esfl" in tb_config.metric_tags:
+                        for name, value in val_losses.items():
+                            if name.startswith("ESFL_"):
+                                tb_logger.log_scalar(f"Val/{name}", value, iteration)
 
-            for name, value in train_loss.items():
-                if name.startswith("ESFL_"):
-                    tb_logger.log_scalar(f"Train/{name}", value, iteration)
-            for name, value in val_losses.items():
-                if name.startswith("ESFL_"):
-                    tb_logger.log_scalar(f"Val/{name}", value, iteration)
-
-            if train_config.tensorboard:
-                tb_logger.log_weight_analysis(models, step=iteration, max_layers=WEIGHT_ANALYSIS_MAX_LAYERS)
-
-            tb_logger.log_images(models, step=iteration, tag_prefix="Sample")
+                if "weights-analysis" in tb_config.items:
+                    tb_logger.log_weight_analysis(models, step=iteration, max_layers=WEIGHT_ANALYSIS_MAX_LAYERS)
+                if "images" in tb_config.items:
+                    tb_logger.log_images(models, step=iteration, tag_prefix="Sample")
 
             # Save validation prediction images
             pred_images_dir = output_dir / "validation_predictions"
@@ -289,8 +295,8 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
     total_time = time.time()
     logger.info(f"Training completed in {(total_time - train_start_time) / 60:.2f} minutes.")
 
-    tb_logger.close()
-    if train_config.tensorboard:
+    if tb_logger is not None:
+        tb_logger.close()
         logger.info("TensorBoard logger closed.")
 
 
@@ -321,7 +327,44 @@ def main() -> None:
     parser.add_argument("--interval", type=int, default=100, help="Validation interval.")
     parser.add_argument("--limit", type=int, default=None, help="Limit on number of training samples (optional).")
     parser.add_argument("--pretrain-model-path", type=Path, default=None, help="Path to the pre-trained model.")
-    parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging.")
+    parser.add_argument("--no-tensorboard", action="store_true", help="Disable TensorBoard logging.")
+    parser.add_argument(
+        "--tensorboard-max-outputs",
+        type=int,
+        default=4,
+        help="Maximum number of sample images to log to TensorBoard.",
+    )
+    parser.add_argument(
+        "--tensorboard-log-subdir",
+        type=Path,
+        default=Path("tensorboard"),
+        help="Subdirectory under output-dir for TensorBoard logs.",
+    )
+    parser.add_argument(
+        "--tensorboard-items",
+        type=str,
+        nargs="*",
+        default=None,
+        metavar="ITEM",
+        help=(
+            "TensorBoard output categories to enable "
+            "(default: metrics images). "
+            "Choices: metrics images graph histograms weights-analysis."
+        ),
+    )
+    parser.add_argument(
+        "--tensorboard-metrics",
+        type=str,
+        nargs="*",
+        default=None,
+        metavar="TAG",
+        help=(
+            "Extra per-tag scalars to log in addition to train/val loss "
+            "(default: none). "
+            "Choices: train-mse val-mse train-psnr val-psnr "
+            "train-ssim val-ssim train-esfl val-esfl."
+        ),
+    )
     parser.add_argument(
         "--verbose", type=str, choices=["debug", "info", "error"], default="info", help="Logging verbosity level."
     )
@@ -342,6 +385,15 @@ def main() -> None:
         if clean_img_keyword
         else None
     )
+    tb_items_raw: list[str] | None = args.pop("tensorboard_items")
+    tb_metrics_raw: list[str] | None = args.pop("tensorboard_metrics")
+    tensorboard_config = TensorboardConfig(
+        enabled=not args.pop("no_tensorboard"),
+        max_outputs=args.pop("tensorboard_max_outputs"),
+        log_subdir=args.pop("tensorboard_log_subdir"),
+        items=frozenset(tb_items_raw) if tb_items_raw is not None else frozenset({"metrics", "images"}),
+        metric_tags=frozenset(tb_metrics_raw) if tb_metrics_raw is not None else frozenset(),
+    )
 
     """Run the training process with default configuration."""
 
@@ -359,7 +411,7 @@ def main() -> None:
         output_dir=args.pop("output_dir"),
         log_dir=args.pop("log_dir"),
         pairing_keywords=pairing_keywords,
-        tensorboard=args.pop("tensorboard"),
+        tensorboard_config=tensorboard_config,
     )
 
     # Run training
