@@ -86,6 +86,7 @@ class TensorBoard:
 
         # Keep previous snapshots for delta-based weight analysis.
         self._previous_weights: dict[str, torch.Tensor] = {}
+        self._weight_layout_signature: tuple[str, ...] | None = None
 
     @staticmethod
     def _select_analysis_layers(model: torch.nn.Module, max_layers: int) -> list[tuple[str, torch.nn.Parameter]]:
@@ -113,6 +114,29 @@ class TensorBoard:
         if weight.ndim == MIN_MATRIX_DIMS:
             return weight
         return weight.reshape(weight.shape[0], -1)
+
+    def _register_weight_dashboard(self, layer_names: list[str]) -> None:
+        """Register a grouped WEIGHTS view in TensorBoard Custom Scalars."""
+        if self.writer is None:
+            return
+
+        signature = tuple(layer_names)
+        if not signature or self._weight_layout_signature == signature:
+            return
+
+        alignment_tags = [f"WeightAnalysis/Alignment/{name_a}__{name_b}" for name_a, name_b in pairwise(layer_names)]
+        weights_layout: dict[str, object] = {
+            "Norm": ["Multiline", [f"WeightAnalysis/Norm/{name}" for name in layer_names]],
+            "DeltaNorm": ["Multiline", [f"WeightAnalysis/DeltaNorm/{name}" for name in layer_names]],
+            "RelativeDelta": ["Multiline", [f"WeightAnalysis/RelativeDelta/{name}" for name in layer_names]],
+            "EffectiveRank": ["Multiline", [f"WeightAnalysis/EffectiveRank/{name}" for name in layer_names]],
+            "StableRank": ["Multiline", [f"WeightAnalysis/StableRank/{name}" for name in layer_names]],
+        }
+        if alignment_tags:
+            weights_layout["Alignment"] = ["Multiline", alignment_tags]
+
+        self.writer.add_custom_scalars({"WEIGHTS": weights_layout})
+        self._weight_layout_signature = signature
 
     def _log_delta_metrics(
         self,
@@ -168,6 +192,7 @@ class TensorBoard:
 
         eps = 1e-12
         selected_layers = self._select_analysis_layers(model, max_layers=max_layers)
+        self._register_weight_dashboard([name for name, _ in selected_layers])
 
         flattened_layers: list[tuple[str, torch.Tensor]] = []
         for name, param in selected_layers:
