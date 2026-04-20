@@ -211,11 +211,10 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
         )
         logger.info(f"TensorBoard logging enabled: {tblog_dir}")
 
-    if tb_logger is not None:
+    if tb_logger is not None and "graph" in tb_config.items:
         sample_input = torch.randn(1, 3, train_config.crop_size, train_config.crop_size).to(device)
-        if "graph" in tb_config.items:
-            tb_logger.log_model_graph(models, sample_input)
-            logger.info("Model graph logged to TensorBoard.")
+        tb_logger.log_model_graph(models, sample_input)
+        logger.info("Model graph logged to TensorBoard.")
 
     train_start_time = time.time()
 
