@@ -132,6 +132,7 @@ python src/denoiser/train.py \
 | `--tensorboard-log-subdir` | Path | "tensorboard" | Output subdirectory for TensorBoard logs |
 | `--tensorboard-items`   | str[] | None        | TensorBoard logging categories to include    |
 | `--tensorboard-metrics` | str[] | None        | TensorBoard metric tags to include           |
+| `--tensorboard-weight-tags` | str[] | None    | WeightAnalysis tags to include (norm/delta/rank/alignment) |
 | `--verbose`             | str   | "info"      | Logging verbosity level (debug/info/error)   |
 
 </details>
