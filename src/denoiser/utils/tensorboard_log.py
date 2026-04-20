@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from itertools import pairwise
 from pathlib import Path
 from typing import Self, TYPE_CHECKING
 
@@ -27,6 +29,8 @@ DISPLAY_SINGLE_IMAGE_DIMS = 3
 DISPLAY_BATCH_DIMS = 4
 DISPLAY_CHANNELS = {1, 3}
 DISPLAY_UINT8_THRESHOLD = 1.5
+MIN_MATRIX_DIMS = 2
+MIN_ALIGNMENT_LENGTH = 2
 
 
 class InvalidBatchTypeError(TypeError):
@@ -79,6 +83,118 @@ class TensorBoard:
             self.log_dir = Path(log_dir)
             self.log_dir.mkdir(parents=True, exist_ok=True)
             self.writer = _SummaryWriter(log_dir=str(self.log_dir))
+
+        # Keep previous snapshots for delta-based weight analysis.
+        self._previous_weights: dict[str, torch.Tensor] = {}
+
+    @staticmethod
+    def _select_analysis_layers(model: torch.nn.Module, max_layers: int) -> list[tuple[str, torch.nn.Parameter]]:
+        """Select trainable weight tensors suitable for matrix-based analysis.
+
+        Layers are sorted by parameter size (descending), then by name for
+        deterministic ordering.
+        """
+        candidates: list[tuple[str, torch.nn.Parameter]] = []
+        for name, param in model.named_parameters():
+            if not param.requires_grad:
+                continue
+            if not name.endswith("weight"):
+                continue
+            if param.ndim < MIN_MATRIX_DIMS:
+                continue
+            candidates.append((name, param))
+
+        candidates.sort(key=lambda item: (-item[1].numel(), item[0]))
+        return candidates[:max(1, max_layers)]
+
+    @staticmethod
+    def _to_weight_matrix(weight: torch.Tensor) -> torch.Tensor:
+        """Convert a convolution/linear weight tensor into a 2D matrix."""
+        if weight.ndim == MIN_MATRIX_DIMS:
+            return weight
+        return weight.reshape(weight.shape[0], -1)
+
+    def _log_delta_metrics(
+        self,
+        name: str,
+        weight: torch.Tensor,
+        previous: torch.Tensor | None,
+        step: int,
+        eps: float,
+    ) -> None:
+        """Log delta metrics between current and previous snapshots."""
+        if self.writer is None:
+            return
+        if previous is None or previous.shape != weight.shape:
+            return
+
+        delta = weight - previous
+        delta_norm = torch.linalg.norm(delta).item()
+        relative_delta = delta_norm / (torch.linalg.norm(previous).item() + eps)
+        self.writer.add_scalar(f"WeightAnalysis/DeltaNorm/{name}", delta_norm, step)
+        self.writer.add_scalar(f"WeightAnalysis/RelativeDelta/{name}", relative_delta, step)
+
+    def _log_spectral_metrics(self, name: str, weight_matrix: torch.Tensor, step: int, eps: float) -> None:
+        """Log effective/stable rank metrics from singular values."""
+        if self.writer is None:
+            return
+        singular_values = torch.linalg.svdvals(weight_matrix)
+        if singular_values.numel() == 0:
+            return
+
+        sv_sum = singular_values.sum().item()
+        if sv_sum > eps:
+            probabilities = singular_values / sv_sum
+            entropy = -(probabilities * torch.log(probabilities + eps)).sum().item()
+            effective_rank = math.exp(entropy)
+            self.writer.add_scalar(f"WeightAnalysis/EffectiveRank/{name}", effective_rank, step)
+
+        sigma_max = singular_values.max().item()
+        if sigma_max > eps:
+            stable_rank = (torch.linalg.norm(weight_matrix, ord="fro").item() ** 2) / (sigma_max**2 + eps)
+            self.writer.add_scalar(f"WeightAnalysis/StableRank/{name}", stable_rank, step)
+
+    def log_weight_analysis(self, model: torch.nn.Module, step: int, max_layers: int = 12) -> None:
+        """Log lightweight weight analysis metrics for selected layers.
+
+        Logged metrics:
+        - Frobenius norm and relative update norm
+        - Effective rank and stable rank from singular values
+        - Inter-layer cosine alignment between adjacent selected layers
+        """
+        if self.writer is None:
+            return
+
+        eps = 1e-12
+        selected_layers = self._select_analysis_layers(model, max_layers=max_layers)
+
+        flattened_layers: list[tuple[str, torch.Tensor]] = []
+        for name, param in selected_layers:
+            weight = param.detach().float().cpu()
+            weight_matrix = self._to_weight_matrix(weight)
+            fro_norm = torch.linalg.norm(weight_matrix, ord="fro").item()
+            self.writer.add_scalar(f"WeightAnalysis/Norm/{name}", fro_norm, step)
+
+            previous = self._previous_weights.get(name)
+            self._log_delta_metrics(name=name, weight=weight, previous=previous, step=step, eps=eps)
+
+            try:
+                self._log_spectral_metrics(name=name, weight_matrix=weight_matrix, step=step, eps=eps)
+            except (RuntimeError, ValueError):
+                # Skip problematic layers while keeping training uninterrupted.
+                continue
+
+            flattened = weight.flatten()
+            flattened_layers.append((name, flattened / (torch.linalg.norm(flattened).item() + eps)))
+            self._previous_weights[name] = weight.clone()
+
+        for (name_a, vec_a), (name_b, vec_b) in pairwise(flattened_layers):
+            # Compare the common prefix length to support varying layer sizes.
+            n = min(vec_a.numel(), vec_b.numel())
+            if n < MIN_ALIGNMENT_LENGTH:
+                continue
+            alignment = torch.dot(vec_a[:n], vec_b[:n]).item()
+            self.writer.add_scalar(f"WeightAnalysis/Alignment/{name_a}__{name_b}", alignment, step)
 
     def log_scalar(self, tag: str, value: float, step: int) -> None:
         """Log a scalar value.
