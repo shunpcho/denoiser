@@ -105,7 +105,7 @@ class TensorBoard:
             candidates.append((name, param))
 
         candidates.sort(key=lambda item: (-item[1].numel(), item[0]))
-        return candidates[:max(1, max_layers)]
+        return candidates[: max(1, max_layers)]
 
     @staticmethod
     def _to_weight_matrix(weight: torch.Tensor) -> torch.Tensor:
@@ -129,8 +129,8 @@ class TensorBoard:
             return
 
         delta = weight - previous
-        delta_norm = torch.linalg.norm(delta).item()
-        relative_delta = delta_norm / (torch.linalg.norm(previous).item() + eps)
+        delta_norm = float(torch.linalg.norm(delta).item())  # pyright: ignore[reportUnknownArgumentType]
+        relative_delta = float(delta_norm / (torch.linalg.norm(previous).item() + eps))  # pyright: ignore[reportUnknownArgumentType]
         self.writer.add_scalar(f"WeightAnalysis/DeltaNorm/{name}", delta_norm, step)
         self.writer.add_scalar(f"WeightAnalysis/RelativeDelta/{name}", relative_delta, step)
 
@@ -138,20 +138,20 @@ class TensorBoard:
         """Log effective/stable rank metrics from singular values."""
         if self.writer is None:
             return
-        singular_values = torch.linalg.svdvals(weight_matrix)
+        singular_values = torch.linalg.svdvals(weight_matrix)  # pyright: ignore[reportUnknownVariableType]
         if singular_values.numel() == 0:
             return
 
-        sv_sum = singular_values.sum().item()
+        sv_sum = float(singular_values.sum().item())  # pyright: ignore[reportUnknownArgumentType]
         if sv_sum > eps:
-            probabilities = singular_values / sv_sum
-            entropy = -(probabilities * torch.log(probabilities + eps)).sum().item()
+            probabilities = singular_values / sv_sum  # pyright: ignore[reportUnknownVariableType]
+            entropy = float(-(probabilities * torch.log(probabilities + eps)).sum().item())  # pyright: ignore[reportUnknownArgumentType]
             effective_rank = math.exp(entropy)
             self.writer.add_scalar(f"WeightAnalysis/EffectiveRank/{name}", effective_rank, step)
 
-        sigma_max = singular_values.max().item()
+        sigma_max = float(singular_values.max().item())  # pyright: ignore[reportUnknownArgumentType]
         if sigma_max > eps:
-            stable_rank = (torch.linalg.norm(weight_matrix, ord="fro").item() ** 2) / (sigma_max**2 + eps)
+            stable_rank = float((torch.linalg.norm(weight_matrix, ord="fro").item() ** 2) / (sigma_max**2 + eps))  # pyright: ignore[reportUnknownArgumentType]
             self.writer.add_scalar(f"WeightAnalysis/StableRank/{name}", stable_rank, step)
 
     def log_weight_analysis(self, model: torch.nn.Module, step: int, max_layers: int = 12) -> None:
@@ -172,7 +172,7 @@ class TensorBoard:
         for name, param in selected_layers:
             weight = param.detach().float().cpu()
             weight_matrix = self._to_weight_matrix(weight)
-            fro_norm = torch.linalg.norm(weight_matrix, ord="fro").item()
+            fro_norm = float(torch.linalg.norm(weight_matrix, ord="fro").item())  # pyright: ignore[reportUnknownArgumentType]
             self.writer.add_scalar(f"WeightAnalysis/Norm/{name}", fro_norm, step)
 
             previous = self._previous_weights.get(name)
@@ -185,7 +185,7 @@ class TensorBoard:
                 continue
 
             flattened = weight.flatten()
-            flattened_layers.append((name, flattened / (torch.linalg.norm(flattened).item() + eps)))
+            flattened_layers.append((name, flattened / (torch.linalg.norm(flattened).item() + eps)))  # pyright: ignore[reportUnknownArgumentType]
             self._previous_weights[name] = weight.clone()
 
         for (name_a, vec_a), (name_b, vec_b) in pairwise(flattened_layers):
