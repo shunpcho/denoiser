@@ -4,8 +4,8 @@ from typing import Self, TypedDict, Unpack
 
 import torch
 
-TB_VALID_ITEMS: frozenset[str] = frozenset({"metrics", "images", "graph", "histograms", "weights-analysis"})
-TB_VALID_METRIC_TAGS: frozenset[str] = frozenset(
+TB_VALID_ITEMS = frozenset({"metrics", "images", "graph", "histograms", "weights-analysis"})
+TB_VALID_METRIC_TAGS = frozenset(
     {"train-mse", "val-mse", "train-psnr", "val-psnr", "train-ssim", "val-ssim", "train-esfl", "val-esfl"}
 )
 
@@ -52,12 +52,12 @@ class TensorboardConfig:
     max_outputs: int = 4
     log_subdir: Path = Path("tensorboard")
     items: frozenset[str] = field(default_factory=lambda: frozenset({"metrics", "images"}))
-    metric_tags: frozenset[str] = field(default_factory=frozenset)
+    metric_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
 
     @classmethod
     def from_optional_kwargs(cls, **kwargs: Unpack[_TensorboardConfigKwargs]) -> Self:
         """Create a TensorboardConfig instance from optional keyword arguments."""
-        return cls(**{key: value for key, value in kwargs.items() if value is not None})
+        return cls(**{key: value for key, value in kwargs.items() if value is not None})  # pyright: ignore[reportArgumentType]
 
 
 class _TrainConfigKwargs(TypedDict, total=False):
