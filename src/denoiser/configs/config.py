@@ -8,6 +8,7 @@ TB_VALID_ITEMS = frozenset({"metrics", "images", "graph", "histograms", "weights
 TB_VALID_METRIC_TAGS = frozenset(
     {"train-mse", "val-mse", "train-psnr", "val-psnr", "train-ssim", "val-ssim", "train-esfl", "val-esfl"}
 )
+TB_VALID_WEIGHT_TAGS = frozenset({"norm", "delta", "relative-delta", "effective-rank", "stable-rank", "alignment"})
 
 
 class _TensorboardConfigKwargs(TypedDict, total=False):
@@ -16,6 +17,7 @@ class _TensorboardConfigKwargs(TypedDict, total=False):
     log_subdir: Path
     items: frozenset[str]
     metric_tags: frozenset[str]
+    weight_tags: frozenset[str]
 
 
 @dataclass
@@ -46,6 +48,9 @@ class TensorboardConfig:
         metric_tags: Per-tag scalars beyond train/val loss. Valid:
             train-mse, val-mse, train-psnr, val-psnr, train-ssim,
             val-ssim, train-esfl, val-esfl. Defaults to empty.
+        weight_tags: Per-tag weight analysis metrics. Valid:
+            norm, delta, relative-delta, effective-rank, stable-rank,
+            alignment. Defaults to empty.
     """
 
     enabled: bool = True
@@ -53,6 +58,7 @@ class TensorboardConfig:
     log_subdir: Path = Path("tensorboard")
     items: frozenset[str] = field(default_factory=lambda: frozenset({"metrics", "images"}))
     metric_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
+    weight_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
 
     @classmethod
     def from_optional_kwargs(cls, **kwargs: Unpack[_TensorboardConfigKwargs]) -> Self:

@@ -269,7 +269,12 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
                                 tb_logger.log_scalar(f"Val/{name}", value, iteration)
 
                 if "weights-analysis" in tb_config.items:
-                    tb_logger.log_weight_analysis(models, step=iteration, max_layers=WEIGHT_ANALYSIS_MAX_LAYERS)
+                    tb_logger.log_weight_analysis(
+                        models,
+                        step=iteration,
+                        max_layers=WEIGHT_ANALYSIS_MAX_LAYERS,
+                        include_tags=tb_config.weight_tags,
+                    )
                 if "images" in tb_config.items:
                     tb_logger.log_images(models, step=iteration, tag_prefix="Sample")
 
@@ -365,6 +370,19 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--tensorboard-weight-tags",
+        type=str,
+        nargs="*",
+        default=None,
+        metavar="WEIGHT_TAG",
+        choices=["norm", "delta", "relative-delta", "effective-rank", "stable-rank", "alignment"],
+        help=(
+            "WeightAnalysis metrics to log "
+            "(default: none). "
+            "Choices: norm delta relative-delta effective-rank stable-rank alignment."
+        ),
+    )
+    parser.add_argument(
         "--verbose", type=str, choices=["debug", "info", "error"], default="info", help="Logging verbosity level."
     )
 
@@ -386,12 +404,18 @@ def main() -> None:
     )
     tb_items_raw: list[str] | None = args.pop("tensorboard_items")
     tb_metrics_raw: list[str] | None = args.pop("tensorboard_metrics")
+    tb_weight_tags_raw: list[str] | None = args.pop("tensorboard_weight_tags")
     tensorboard_config = TensorboardConfig(
         enabled=not args.pop("no_tensorboard"),
         max_outputs=args.pop("tensorboard_max_outputs"),
         log_subdir=args.pop("tensorboard_log_subdir"),
         items=frozenset(tb_items_raw) if tb_items_raw is not None else frozenset({"metrics", "images"}),
         metric_tags=frozenset(tb_metrics_raw) if tb_metrics_raw is not None else frozenset(),
+        weight_tags=(
+            frozenset(tb_weight_tags_raw)
+            if tb_weight_tags_raw is not None
+            else frozenset()
+        ),
     )
 
     """Run the training process with default configuration."""
