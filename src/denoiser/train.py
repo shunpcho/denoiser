@@ -29,6 +29,8 @@ from denoiser.utils.tensorboard_log import TensorBoard
 from denoiser.utils.trainer import TrainTrainer
 from denoiser.utils.vis_img import save_validation_predictions_stitched
 
+WEIGHT_ANALYSIS_MAX_LAYERS = 12
+
 
 def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
     train_data_path: Path,
@@ -260,6 +262,9 @@ def train(  # noqa: PLR0912, PLR0914, PLR0915, C901
             for name, value in val_losses.items():
                 if name.startswith("ESFL_"):
                     tb_logger.log_scalar(f"Val/{name}", value, iteration)
+
+            if train_config.tensorboard:
+                tb_logger.log_weight_analysis(models, step=iteration, max_layers=WEIGHT_ANALYSIS_MAX_LAYERS)
 
             tb_logger.log_images(models, step=iteration, tag_prefix="Sample")
 
