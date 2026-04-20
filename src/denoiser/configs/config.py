@@ -60,6 +60,14 @@ class TensorboardConfig:
     metric_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
     weight_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
 
+    def __post_init__(self) -> None:
+        if invalid := self.items - TB_VALID_ITEMS:
+            raise ValueError(f"Invalid TensorboardConfig.items: {invalid}. Valid: {TB_VALID_ITEMS}")
+        if invalid := self.metric_tags - TB_VALID_METRIC_TAGS:
+            raise ValueError(f"Invalid TensorboardConfig.metric_tags: {invalid}. Valid: {TB_VALID_METRIC_TAGS}")
+        if invalid := self.weight_tags - TB_VALID_WEIGHT_TAGS:
+            raise ValueError(f"Invalid TensorboardConfig.weight_tags: {invalid}. Valid: {TB_VALID_WEIGHT_TAGS}")
+
     @classmethod
     def from_optional_kwargs(cls, **kwargs: Unpack[_TensorboardConfigKwargs]) -> Self:
         """Create a TensorboardConfig instance from optional keyword arguments."""
