@@ -100,7 +100,7 @@ python src/denoiser/train.py \
   --interval 50 \
   --output-dir "./results" \
   --log-dir "logs" \
-  --tensorboard \
+  --tensorboard-max-outputs 4 \
   --verbose "info"
 
 ```
@@ -127,7 +127,9 @@ python src/denoiser/train.py \
 | `--interval`            | int   | 100         | Validation interval                          |
 | `--limit`               | int   | None        | Limit on number of training samples          |
 | `--pretrain-model-path` | Path  | None        | Path to the pre-trained model                |
-| `--tensorboard`         | flag  | True        | Enable TensorBoard logging                   |
+| `--no-tensorboard`      | flag  | False       | Disable TensorBoard logging                  |
+| `--tensorboard-max-outputs` | int | 4        | Maximum number of sample images logged to TensorBoard |
+| `--tensorboard-log-subdir` | Path | "tensorboard" | Output subdirectory for TensorBoard logs |
 | `--verbose`             | str   | "info"      | Logging verbosity level (debug/info/error)   |
 
 </details>
