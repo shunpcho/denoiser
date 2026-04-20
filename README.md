@@ -130,6 +130,8 @@ python src/denoiser/train.py \
 | `--no-tensorboard`      | flag  | False       | Disable TensorBoard logging                  |
 | `--tensorboard-max-outputs` | int | 4        | Maximum number of sample images logged to TensorBoard |
 | `--tensorboard-log-subdir` | Path | "tensorboard" | Output subdirectory for TensorBoard logs |
+| `--tensorboard-items`   | str[] | None        | TensorBoard logging categories to include    |
+| `--tensorboard-metrics` | str[] | None        | TensorBoard metric tags to include           |
 | `--verbose`             | str   | "info"      | Logging verbosity level (debug/info/error)   |
 
 </details>
