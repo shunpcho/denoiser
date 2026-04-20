@@ -151,7 +151,8 @@ class TensorBoard:
 
         sigma_max = float(singular_values.max().item())  # pyright: ignore[reportUnknownArgumentType]
         if sigma_max > eps:
-            stable_rank = float((torch.linalg.norm(weight_matrix, ord="fro").item() ** 2) / (sigma_max**2 + eps))  # pyright: ignore[reportUnknownArgumentType]
+            frobenius_norm_sq = float(singular_values.square().sum().item())  # pyright: ignore[reportUnknownArgumentType]
+            stable_rank = float(frobenius_norm_sq / (sigma_max**2 + eps))
             self.writer.add_scalar(f"WeightAnalysis/StableRank/{name}", stable_rank, step)
 
     def log_weight_analysis(self, model: torch.nn.Module, step: int, max_layers: int = 12) -> None:
