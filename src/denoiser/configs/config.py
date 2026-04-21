@@ -62,11 +62,14 @@ class TensorboardConfig:
 
     def __post_init__(self) -> None:
         if invalid := self.items - TB_VALID_ITEMS:
-            raise ValueError(f"Invalid TensorboardConfig.items: {invalid}. Valid: {TB_VALID_ITEMS}")
+            msg = f"Invalid TensorboardConfig.items: {invalid}. Valid: {TB_VALID_ITEMS}"
+            raise ValueError(msg)
         if invalid := self.metric_tags - TB_VALID_METRIC_TAGS:
-            raise ValueError(f"Invalid TensorboardConfig.metric_tags: {invalid}. Valid: {TB_VALID_METRIC_TAGS}")
+            msg = f"Invalid TensorboardConfig.metric_tags: {invalid}. Valid: {TB_VALID_METRIC_TAGS}"
+            raise ValueError(msg)
         if invalid := self.weight_tags - TB_VALID_WEIGHT_TAGS:
-            raise ValueError(f"Invalid TensorboardConfig.weight_tags: {invalid}. Valid: {TB_VALID_WEIGHT_TAGS}")
+            msg = f"Invalid TensorboardConfig.weight_tags: {invalid}. Valid: {TB_VALID_WEIGHT_TAGS}"
+            raise ValueError(msg)
 
     @classmethod
     def from_optional_kwargs(cls, **kwargs: Unpack[_TensorboardConfigKwargs]) -> Self:
