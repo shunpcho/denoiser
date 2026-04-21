@@ -4,6 +4,21 @@ from typing import Self, TypedDict, Unpack
 
 import torch
 
+TB_VALID_ITEMS = frozenset({"metrics", "images", "graph", "histograms", "weights-analysis"})
+TB_VALID_METRIC_TAGS = frozenset(
+    {"train-mse", "val-mse", "train-psnr", "val-psnr", "train-ssim", "val-ssim", "train-esfl", "val-esfl"}
+)
+TB_VALID_WEIGHT_TAGS = frozenset({"norm", "delta", "relative-delta", "effective-rank", "stable-rank", "alignment"})
+
+
+class _TensorboardConfigKwargs(TypedDict, total=False):
+    enabled: bool
+    max_outputs: int
+    log_subdir: Path
+    items: frozenset[str]
+    metric_tags: frozenset[str]
+    weight_tags: frozenset[str]
+
 
 @dataclass
 class PairingKeyWords:
@@ -20,6 +35,48 @@ class PairingKeyWords:
     detector: list[str] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TensorboardConfig:
+    """Configuration for TensorBoard logging.
+
+    Args:
+        enabled: Whether to enable TensorBoard logging.
+        max_outputs: Maximum number of sample images to log.
+        log_subdir: Subdirectory under output_dir for TensorBoard logs.
+        items: Output categories to enable. Valid: metrics, images, graph,
+            histograms, weights-analysis. Defaults to {metrics, images}.
+        metric_tags: Per-tag scalars beyond train/val loss. Valid:
+            train-mse, val-mse, train-psnr, val-psnr, train-ssim,
+            val-ssim, train-esfl, val-esfl. Defaults to empty.
+        weight_tags: Per-tag weight analysis metrics. Valid:
+            norm, delta, relative-delta, effective-rank, stable-rank,
+            alignment. Defaults to empty.
+    """
+
+    enabled: bool = True
+    max_outputs: int = 4
+    log_subdir: Path = Path("tensorboard")
+    items: frozenset[str] = field(default_factory=lambda: frozenset({"metrics", "images"}))
+    metric_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
+    weight_tags: frozenset[str] = field(default_factory=frozenset)  # pyright: ignore[reportUnknownVariableType]
+
+    def __post_init__(self) -> None:
+        if invalid := self.items - TB_VALID_ITEMS:
+            msg = f"Invalid TensorboardConfig.items: {invalid}. Valid: {TB_VALID_ITEMS}"
+            raise ValueError(msg)
+        if invalid := self.metric_tags - TB_VALID_METRIC_TAGS:
+            msg = f"Invalid TensorboardConfig.metric_tags: {invalid}. Valid: {TB_VALID_METRIC_TAGS}"
+            raise ValueError(msg)
+        if invalid := self.weight_tags - TB_VALID_WEIGHT_TAGS:
+            msg = f"Invalid TensorboardConfig.weight_tags: {invalid}. Valid: {TB_VALID_WEIGHT_TAGS}"
+            raise ValueError(msg)
+
+    @classmethod
+    def from_optional_kwargs(cls, **kwargs: Unpack[_TensorboardConfigKwargs]) -> Self:
+        """Create a TensorboardConfig instance from optional keyword arguments."""
+        return cls(**{key: value for key, value in kwargs.items() if value is not None})  # pyright: ignore[reportArgumentType]
+
+
 class _TrainConfigKwargs(TypedDict, total=False):
     batch_size: int
     crop_size: int
@@ -33,7 +90,7 @@ class _TrainConfigKwargs(TypedDict, total=False):
     output_dir: Path
     log_dir: Path
     pairing_keywords: PairingKeyWords | None
-    tensorboard: bool
+    tensorboard_config: TensorboardConfig
     device: torch.device
 
 
@@ -58,7 +115,7 @@ class TrainConfig:
 
     pretrain_model_path: Path | None = None
 
-    tensorboard: bool = False
+    tensorboard_config: TensorboardConfig = field(default_factory=TensorboardConfig)
 
     # Device (will be set during runtime)
     device: torch.device = field(default_factory=lambda: torch.device("cuda" if torch.cuda.is_available() else "cpu"))
